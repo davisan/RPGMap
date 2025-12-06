@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RPG Map Maker - Grid Offset</title>
+    <title>RPG Map Maker - Cursor Preview</title>
     <style>
         /* --- ESTILOS GERAIS --- */
         * { box-sizing: border-box; }
@@ -38,7 +38,6 @@
         }
         .sidebar.closed { transform: translateX(-100%); }
 
-        /* Acordeões */
         details { background: rgba(0,0,0,0.2); border-radius: 6px; overflow: hidden; }
         summary {
             padding: 12px; font-weight: bold; cursor: pointer;
@@ -51,7 +50,6 @@
         details[open] summary { border-bottom: 1px solid rgba(255,255,255,0.1); color: #2ecc71; }
         .group-content { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
 
-        /* Inputs e Layout */
         .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
         .row-input { display: flex; justify-content: space-between; align-items: center; }
@@ -93,10 +91,14 @@
         #ytFrame { width: 100%; height: 100%; border: none; display: none; }
         #localVideo { width: 100%; height: 100%; object-fit: cover; display: none; }
 
+        /* --- CAMADAS CANVAS --- */
         canvas { position: absolute; top: 0; left: 0; }
-        #bgLayer { z-index: 1; pointer-events: none; }
-        #gridLayer { z-index: 2; pointer-events: none; }
-        #drawLayer { z-index: 3; }
+        
+        #bgLayer   { z-index: 1; pointer-events: none; }
+        #drawLayer { z-index: 2; }
+        #gridLayer { z-index: 3; pointer-events: none; }
+        /* NOVA CAMADA DE CURSOR */
+        #cursorLayer { z-index: 4; pointer-events: none; } /* No topo e transparente a cliques */
 
     </style>
 </head>
@@ -116,7 +118,7 @@
                 </div>
                 <div class="row-input">
                     <div style="width: 50px;"><input type="color" id="brushColor" value="#2c3e50"></div>
-                    <input type="range" id="brushSize" min="1" max="50" value="5">
+                    <input type="range" id="brushSize" min="1" max="500" value="5">
                 </div>
                 <div class="row-2">
                     <button onclick="undo()" id="btnUndo" class="btn-orange">↶ Undo</button>
@@ -156,9 +158,6 @@
                     <label>Espessura</label>
                     <input type="range" id="gridWidth" min="1" max="5" value="1" oninput="updateGrid()">
                 </div>
-
-                <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0;"></div>
-
                 <div class="row-input">
                     <label>Deslocar X/Y</label>
                     <div style="display:flex; gap:5px;">
@@ -219,14 +218,15 @@
                     <video id="localVideo" loop muted playsinline></video>
                 </div>
                 <canvas id="bgLayer"></canvas>
-                <canvas id="gridLayer"></canvas>
                 <canvas id="drawLayer"></canvas>
+                <canvas id="gridLayer"></canvas>
+                <canvas id="cursorLayer"></canvas>
             </div>
         </div>
     </main>
 
     <script>
-        const LOCAL_STORAGE_KEY = 'rpgMapData_v8_offset';
+        const LOCAL_STORAGE_KEY = 'rpgMapData_v10_cursor';
         
         // --- ELEMENTOS ---
         const sidebar = document.getElementById('sidebar');
@@ -239,9 +239,14 @@
         const bgCanvas = document.getElementById('bgLayer');
         const gridCanvas = document.getElementById('gridLayer');
         const drawCanvas = document.getElementById('drawLayer');
+        // NOVO: Referência ao canvas do cursor
+        const cursorCanvas = document.getElementById('cursorLayer');
+
         const bgCtx = bgCanvas.getContext('2d');
         const gridCtx = gridCanvas.getContext('2d');
         const drawCtx = drawCanvas.getContext('2d');
+        // NOVO: Contexto do cursor
+        const cursorCtx = cursorCanvas.getContext('2d');
         
         // --- INPUTS ---
         const inputs = {
@@ -251,10 +256,8 @@
             gridColor: document.getElementById('gridColor'),
             gridWidth: document.getElementById('gridWidth'),
             gridPattern: document.getElementById('gridPattern'),
-            // NOVO: OFFSETS
             gridOffsetX: document.getElementById('gridOffsetX'),
             gridOffsetY: document.getElementById('gridOffsetY'),
-            
             brushColor: document.getElementById('brushColor'), 
             brushSize: document.getElementById('brushSize'),
             ytUrl: document.getElementById('ytUrl')
@@ -284,105 +287,87 @@
 
         function toggleSidebar() { sidebar.classList.toggle('closed'); }
 
-        // --- DESENHO DA GRADE COM OFFSET ---
-        function drawGrid() {
-            const w = gridCanvas.width;
-            const h = gridCanvas.height;
-            const s = parseInt(inputs.cellSize.value);
+        // --- NOVA FUNÇÃO: DESENHAR PREVISÃO DO CURSOR ---
+        function updateCursorPreview(pos) {
+            // Limpa o canvas do cursor
+            cursorCtx.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height);
+
+            // Só mostra se não estiver a mover
+            if (state.tool === 'pan') return;
+
+            const size = parseInt(inputs.brushSize.value);
+            const radius = size / 2;
+
+            cursorCtx.beginPath();
+            cursorCtx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
             
-            // Novos valores de deslocamento
-            const offX = parseInt(inputs.gridOffsetX.value) || 0;
-            const offY = parseInt(inputs.gridOffsetY.value) || 0;
-
-            gridCtx.clearRect(0, 0, w, h);
-            gridCtx.beginPath();
-            
-            gridCtx.strokeStyle = inputs.gridColor.value;
-            gridCtx.lineWidth = inputs.gridWidth.value;
-
-            const p = inputs.gridPattern.value;
-            if (p === 'dashed') gridCtx.setLineDash([10, 5]);
-            else if (p === 'dotted') gridCtx.setLineDash([2, 3]);
-            else gridCtx.setLineDash([]); 
-
-            // Cálculo para desenhar a grade deslocada
-            // Começamos o loop um pouco antes de 0 para garantir que o deslocamento não deixa buracos
-            const startX = (offX % s) - s;
-            const startY = (offY % s) - s;
-
-            // Linhas Verticais
-            for (let x = startX; x <= w; x += s) {
-                // Adicionamos 0.5 para nitidez no canvas
-                gridCtx.moveTo(x + 0.5, 0); 
-                gridCtx.lineTo(x + 0.5, h);
+            // Estilo dependendo da ferramenta
+            if (state.tool === 'eraser') {
+                cursorCtx.fillStyle = "rgba(231, 76, 60, 0.3)"; // Vermelho transparente
+                cursorCtx.strokeStyle = "#e74c3c";
+            } else {
+                cursorCtx.fillStyle = "rgba(46, 204, 113, 0.3)"; // Verde transparente (ou podia usar a cor do pincel)
+                cursorCtx.strokeStyle = "#2ecc71";
             }
-            // Linhas Horizontais
-            for (let y = startY; y <= h; y += s) {
-                gridCtx.moveTo(0, y + 0.5);
-                gridCtx.lineTo(w, y + 0.5);
-            }
-            gridCtx.stroke();
+            cursorCtx.lineWidth = 1;
+            cursorCtx.fill();
+            cursorCtx.stroke();
         }
 
-        function updateGrid() { drawGrid(); autoSave(); }
-
-        // --- VÍDEO ---
-        function extractVideoID(url) {
-            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-            const match = url.match(regExp);
-            return (match && match[2].length === 11) ? match[2] : null;
-        }
-
-        function setYoutubeBackground() {
-            const url = inputs.ytUrl.value;
-            const videoID = extractVideoID(url);
-            if (videoID) {
-                state.youtubeID = videoID; state.hasLocalVideo = false;
-                renderVideoState(); autoSave();
-            } else { alert("Link inválido."); }
-        }
-
-        function loadLocalVideo(input) {
-            const file = input.files[0]; if (!file) return;
-            const fileURL = URL.createObjectURL(file);
-            localVideo.src = fileURL; localVideo.play();
-            state.hasLocalVideo = true; state.youtubeID = null; inputs.ytUrl.value = "";
-            renderVideoState();
-        }
-
-        function renderVideoState() {
-            ytFrame.style.display = 'none'; localVideo.style.display = 'none';
-            if (state.hasLocalVideo) { localVideo.style.display = 'block'; localVideo.play(); } 
-            else if (state.youtubeID) {
-                const embedUrl = `https://www.youtube.com/embed/${state.youtubeID}?autoplay=1&mute=1&controls=0&loop=1&playlist=${state.youtubeID}&playsinline=1`;
-                ytFrame.src = embedUrl; ytFrame.style.display = 'block';
-            } else { ytFrame.src = ""; localVideo.pause(); localVideo.removeAttribute('src'); }
-        }
-
-        function clearVideo() {
-            state.youtubeID = null; state.hasLocalVideo = false; inputs.ytUrl.value = '';
-            renderVideoState(); autoSave();
-        }
-
-        // --- INPUT HANDLING ---
+        // --- INPUT HANDLING (MODIFICADO PARA HOVER) ---
         function getPointerPos(e) {
             const rect = drawCanvas.getBoundingClientRect();
-            const cx = e.touches ? e.touches[0].clientX : e.clientX;
-            const cy = e.touches ? e.touches[0].clientY : e.clientY;
-            return { x: cx - rect.left, y: cy - rect.top, rawX: cx, rawY: cy };
+            // Verifica se é toque ou mouse
+            const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+            const clientY = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : e.clientY;
+
+            // Se não houver input (ex: touchend), retorna null
+            if (clientX === undefined || clientY === undefined) return null;
+
+            return { x: clientX - rect.left, y: clientY - rect.top, rawX: clientX, rawY: clientY };
         }
+
+        // Handler para movimento sem clique (Hover)
+        function handleHoverMove(e) {
+            // Se estivermos a arrastar (pan), não queremos ver o cursor de desenho
+            if (state.isActionActive && state.tool === 'pan') return;
+
+            const pos = getPointerPos(e);
+            if(pos) updateCursorPreview(pos);
+        }
+
+        // Limpa o cursor quando o rato sai da área
+        function handleMouseLeave() {
+             cursorCtx.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height);
+        }
+
+
         function handleStart(e) {
             if (e.target.closest('#toggleBtn')) return; 
+            // Permite interação com elementos de form na sidebar
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'SUMMARY') return;
+
             if (e.cancelable) e.preventDefault();
             state.isActionActive = true; const pos = getPointerPos(e);
+            if (!pos) return;
+
             if (state.tool === 'pan') {
                 state.panStartX = pos.rawX - state.offsetX; state.panStartY = pos.rawY - state.offsetY; viewport.style.cursor = 'grabbing';
-            } else { state.lastX = pos.x; state.lastY = pos.y; performDraw(pos.x, pos.y); }
+                cursorCtx.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height); // Limpa cursor ao mover
+            } else { 
+                state.lastX = pos.x; state.lastY = pos.y; performDraw(pos.x, pos.y);
+                updateCursorPreview(pos); // Atualiza cursor ao clicar
+            }
         }
         function handleMove(e) {
             if (!state.isActionActive) return; if (e.cancelable) e.preventDefault(); const pos = getPointerPos(e);
+            if (!pos) return;
+
             if (state.tool === 'pan') { state.offsetX = pos.rawX - state.panStartX; state.offsetY = pos.rawY - state.panStartY; updateViewTransform(); } 
-            else { performDraw(pos.x, pos.y); }
+            else { 
+                performDraw(pos.x, pos.y);
+                updateCursorPreview(pos); // Cursor segue o arrasto
+            }
         }
         function handleEnd() {
             if (state.isActionActive) {
@@ -390,9 +375,15 @@
                 if (state.tool === 'pan') { viewport.style.cursor = 'grab'; } else { saveHistoryState(); autoSave(); }
             }
         }
+        
+        // Listeners para Ações (Clique/Toque)
         viewport.addEventListener('mousedown', handleStart); viewport.addEventListener('touchstart', handleStart, { passive: false });
         window.addEventListener('mousemove', handleMove); window.addEventListener('touchmove', handleMove, { passive: false });
         window.addEventListener('mouseup', handleEnd); window.addEventListener('touchend', handleEnd);
+
+        // NOVO: Listeners para Hover (apenas mouse, touch não tem hover)
+        viewport.addEventListener('mousemove', handleHoverMove);
+        viewport.addEventListener('mouseleave', handleMouseLeave);
 
         function updateViewTransform() { contentWrapper.style.transform = `translate(${state.offsetX}px, ${state.offsetY}px)`; }
         function performDraw(currX, currY) {
@@ -403,109 +394,49 @@
             drawCtx.stroke(); [state.lastX, state.lastY] = [currX, currY];
         }
 
-        // --- ARQUIVOS E STORAGE ---
-        function getCurrentMapData() {
-            return {
-                cols: inputs.cols.value, rows: inputs.rows.value, cellSize: inputs.cellSize.value,
-                gridColor: inputs.gridColor.value, gridWidth: inputs.gridWidth.value, gridPattern: inputs.gridPattern.value,
-                // Salvar Offsets
-                gridOffsetX: inputs.gridOffsetX.value, gridOffsetY: inputs.gridOffsetY.value,
-                image: drawCanvas.toDataURL(), bgImage: state.bgImageSrc, youtubeID: state.youtubeID
-            };
+        // --- GRID ---
+        function drawGrid() {
+            const w = gridCanvas.width; const h = gridCanvas.height; const s = parseInt(inputs.cellSize.value);
+            const offX = parseInt(inputs.gridOffsetX.value) || 0; const offY = parseInt(inputs.gridOffsetY.value) || 0;
+            gridCtx.clearRect(0, 0, w, h); gridCtx.beginPath();
+            gridCtx.strokeStyle = inputs.gridColor.value; gridCtx.lineWidth = inputs.gridWidth.value;
+            const p = inputs.gridPattern.value;
+            if (p === 'dashed') gridCtx.setLineDash([10, 5]); else if (p === 'dotted') gridCtx.setLineDash([2, 3]); else gridCtx.setLineDash([]); 
+            const startX = (offX % s) - s; const startY = (offY % s) - s;
+            for (let x = startX; x <= w; x += s) { gridCtx.moveTo(x + 0.5, 0); gridCtx.lineTo(x + 0.5, h); }
+            for (let y = startY; y <= h; y += s) { gridCtx.moveTo(0, y + 0.5); gridCtx.lineTo(w, y + 0.5); }
+            gridCtx.stroke();
         }
+        function updateGrid() { drawGrid(); autoSave(); }
+
+        // --- VÍDEO & FUNDO ---
+        function extractVideoID(url) { const m = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/); return (m && m[2].length === 11) ? m[2] : null; }
+        function setYoutubeBackground() { const id = extractVideoID(inputs.ytUrl.value); if(id){state.youtubeID=id; state.hasLocalVideo=false; renderVideoState(); autoSave();}else{alert("Link inválido.");} }
+        function loadLocalVideo(i) { const f=i.files[0]; if(!f)return; localVideo.src=URL.createObjectURL(f); localVideo.play(); state.hasLocalVideo=true; state.youtubeID=null; inputs.ytUrl.value=""; renderVideoState(); }
+        function renderVideoState() { ytFrame.style.display='none'; localVideo.style.display='none'; if(state.hasLocalVideo){localVideo.style.display='block';localVideo.play();}else if(state.youtubeID){ytFrame.src=`https://www.youtube.com/embed/${state.youtubeID}?autoplay=1&mute=1&controls=0&loop=1&playlist=${state.youtubeID}&playsinline=1`;ytFrame.style.display='block';}else{ytFrame.src="";localVideo.pause();localVideo.removeAttribute('src');} }
+        function clearVideo() { state.youtubeID=null; state.hasLocalVideo=false; inputs.ytUrl.value=''; renderVideoState(); autoSave(); }
+        function loadBackground(i) { const f=i.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{state.bgImageSrc=e.target.result;drawBackground();autoSave();}; r.readAsDataURL(f); i.value=''; }
+        function drawBackground() { bgCtx.clearRect(0,0,bgCanvas.width,bgCanvas.height); if(!state.bgImageSrc)return; const i=new Image(); i.src=state.bgImageSrc; i.onload=()=>{bgCtx.drawImage(i,0,0,bgCanvas.width,bgCanvas.height);}; }
+        function clearBackground() { state.bgImageSrc=null; drawBackground(); autoSave(); }
+
+        // --- STORAGE & EXPORT ---
+        function getCurrentMapData() { return { cols:inputs.cols.value, rows:inputs.rows.value, cellSize:inputs.cellSize.value, gridColor:inputs.gridColor.value, gridWidth:inputs.gridWidth.value, gridPattern:inputs.gridPattern.value, gridOffsetX:inputs.gridOffsetX.value, gridOffsetY:inputs.gridOffsetY.value, image:drawCanvas.toDataURL(), bgImage:state.bgImageSrc, youtubeID:state.youtubeID }; }
         function autoSave() { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(getCurrentMapData())); }
-        function saveProjectFile() {
-            const data = getCurrentMapData();
-            const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
-            const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = "mapa.json"; a.click(); URL.revokeObjectURL(url);
-        }
-        function loadFromLocalStorage() {
-            const saved = localStorage.getItem(LOCAL_STORAGE_KEY); if (!saved) return false;
-            try { applyMapData(JSON.parse(saved)); return true; } catch (e) { return false; }
-        }
-        function loadProjectFile(input) {
-            const file = input.files[0]; if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => { try { applyMapData(JSON.parse(e.target.result)); autoSave(); } catch (err) { alert("Erro ao ler arquivo."); } };
-            reader.readAsText(file); input.value = '';
-        }
-        function applyMapData(data) {
-            inputs.cols.value = data.cols; inputs.rows.value = data.rows; inputs.cellSize.value = data.cellSize;
-            inputs.gridColor.value = data.gridColor || '#cccccc'; inputs.gridWidth.value = data.gridWidth || 1; inputs.gridPattern.value = data.gridPattern || 'solid';
-            // Carregar Offsets
-            inputs.gridOffsetX.value = data.gridOffsetX || 0;
-            inputs.gridOffsetY.value = data.gridOffsetY || 0;
+        function saveProjectFile() { const d=getCurrentMapData(); const b=new Blob([JSON.stringify(d)],{type:"application/json"}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download="mapa.json"; a.click(); URL.revokeObjectURL(u); }
+        function loadFromLocalStorage() { const s=localStorage.getItem(LOCAL_STORAGE_KEY); if(!s)return false; try{applyMapData(JSON.parse(s));return true;}catch(e){return false;} }
+        function loadProjectFile(i) { const f=i.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{try{applyMapData(JSON.parse(e.target.result));autoSave();}catch(err){alert("Erro ao ler arquivo.");}}; r.readAsText(f); i.value=''; }
+        function applyMapData(d) { inputs.cols.value=d.cols; inputs.rows.value=d.rows; inputs.cellSize.value=d.cellSize; inputs.gridColor.value=d.gridColor||'#cccccc'; inputs.gridWidth.value=d.gridWidth||1; inputs.gridPattern.value=d.gridPattern||'solid'; inputs.gridOffsetX.value=d.gridOffsetX||0; inputs.gridOffsetY.value=d.gridOffsetY||0; state.bgImageSrc=d.bgImage||null; state.youtubeID=d.youtubeID||null; if(state.youtubeID)inputs.ytUrl.value=`https://youtube.com/watch?v=${state.youtubeID}`; resizeCanvasStruct(); drawGrid(); drawBackground(); renderVideoState(); if(d.image){const i=new Image(); i.src=d.image; i.onload=()=>{drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height); drawCtx.drawImage(i,0,0); history=[drawCanvas.toDataURL()]; historyStep=0; updateButtons();};} }
+        function exportImage() { const t=document.createElement('canvas'); t.width=drawCanvas.width; t.height=drawCanvas.height; const tc=t.getContext('2d'); tc.fillStyle="#ffffff"; tc.fillRect(0,0,t.width,t.height); if(state.bgImageSrc)tc.drawImage(bgCanvas,0,0); tc.drawImage(drawCanvas,0,0); tc.drawImage(gridCanvas,0,0); const l=document.createElement('a'); l.download='mapa-rpg.png'; l.href=t.toDataURL(); l.click(); }
 
-            state.bgImageSrc = data.bgImage || null; state.youtubeID = data.youtubeID || null;
-            if(state.youtubeID) inputs.ytUrl.value = `https://youtube.com/watch?v=${state.youtubeID}`;
-            resizeCanvasStruct(); drawGrid(); drawBackground(); renderVideoState();
-            if (data.image) {
-                const img = new Image(); img.src = data.image;
-                img.onload = () => {
-                    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height); drawCtx.drawImage(img, 0, 0);
-                    history = [drawCanvas.toDataURL()]; historyStep = 0; updateButtons();
-                };
-            }
-        }
-        
-        function loadBackground(input) {
-            const file = input.files[0]; if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => { state.bgImageSrc = e.target.result; drawBackground(); autoSave(); };
-            reader.readAsDataURL(file); input.value = '';
-        }
-        function drawBackground() {
-            bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-            if (!state.bgImageSrc) return;
-            const img = new Image(); img.src = state.bgImageSrc;
-            img.onload = () => { bgCtx.drawImage(img, 0, 0, bgCanvas.width, bgCanvas.height); };
-        }
-        function clearBackground() { state.bgImageSrc = null; drawBackground(); autoSave(); }
-
-        function exportImage() {
-            const tempCanvas = document.createElement('canvas'); tempCanvas.width = drawCanvas.width; tempCanvas.height = drawCanvas.height;
-            const tCtx = tempCanvas.getContext('2d'); tCtx.fillStyle = "#ffffff"; tCtx.fillRect(0,0, tempCanvas.width, tempCanvas.height);
-            if (state.bgImageSrc) tCtx.drawImage(bgCanvas, 0, 0);
-            tCtx.drawImage(gridCanvas, 0, 0); tCtx.drawImage(drawCanvas, 0, 0);
-            const link = document.createElement('a'); link.download = 'mapa-rpg.png'; link.href = tempCanvas.toDataURL(); link.click();
-        }
-
-        function resizeCanvasStruct() {
-            const w = parseInt(inputs.cols.value) * parseInt(inputs.cellSize.value); const h = parseInt(inputs.rows.value) * parseInt(inputs.cellSize.value);
-            container.style.width = w + 'px'; container.style.height = h + 'px';
-            bgCanvas.width = w; bgCanvas.height = h; gridCanvas.width = w; gridCanvas.height = h; drawCanvas.width = w; drawCanvas.height = h;
-        }
-        function resizeMap(clear = false) {
-            if (clear && !confirm("Apagar tudo?")) return;
-            resizeCanvasStruct(); drawGrid(); drawBackground(); renderVideoState();
-            if (clear) {
-                drawCtx.clearRect(0,0, drawCanvas.width, drawCanvas.height);
-                history = []; historyStep = -1; saveHistoryState(); autoSave();
-                state.offsetX = 50; state.offsetY = 50; updateViewTransform();
-                clearBackground(); clearVideo();
-            }
-        }
-        
-        function setTool(toolName) {
-            state.tool = toolName; Object.values(btns).forEach(b => { if(b.classList) b.classList.remove('active'); });
-            if (btns[toolName]) btns[toolName].classList.add('active');
-        }
-        function saveHistoryState() {
-            historyStep++; if (historyStep < history.length) history.length = historyStep;
-            history.push(drawCanvas.toDataURL()); updateButtons();
-        }
-        function undo() { if (historyStep > 0) { historyStep--; restoreHistoryState(); } }
-        function redo() { if (historyStep < history.length - 1) { historyStep++; restoreHistoryState(); } }
-        function restoreHistoryState() {
-            const img = new Image(); img.src = history[historyStep];
-            img.onload = () => {
-                drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-                const prev = drawCtx.globalCompositeOperation; drawCtx.globalCompositeOperation = 'source-over';
-                drawCtx.drawImage(img, 0, 0); drawCtx.globalCompositeOperation = prev;
-                updateButtons(); autoSave();
-            };
-        }
-        function updateButtons() { btns.undo.disabled = (historyStep <= 0); btns.redo.disabled = (historyStep >= history.length - 1); }
+        // --- UTILS ---
+        function resizeCanvasStruct() { const w=parseInt(inputs.cols.value)*parseInt(inputs.cellSize.value); const h=parseInt(inputs.rows.value)*parseInt(inputs.cellSize.value); container.style.width=w+'px'; container.style.height=h+'px'; bgCanvas.width=w; bgCanvas.height=h; gridCanvas.width=w; gridCanvas.height=h; drawCanvas.width=w; drawCanvas.height=h; cursorCanvas.width=w; cursorCanvas.height=h; }
+        function resizeMap(c=false) { if(c&&!confirm("Apagar tudo?"))return; resizeCanvasStruct(); drawGrid(); drawBackground(); renderVideoState(); if(c){drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height); history=[]; historyStep=-1; saveHistoryState(); autoSave(); state.offsetX=50; state.offsetY=50; updateViewTransform(); clearBackground(); clearVideo(); cursorCtx.clearRect(0,0,cursorCanvas.width,cursorCanvas.height);} }
+        function setTool(t) { state.tool=t; Object.values(btns).forEach(b=>{if(b.classList)b.classList.remove('active');}); if(btns[t])btns[t].classList.add('active'); }
+        function saveHistoryState() { historyStep++; if(historyStep<history.length)history.length=historyStep; history.push(drawCanvas.toDataURL()); updateButtons(); }
+        function undo() { if(historyStep>0){historyStep--; restoreHistoryState();} }
+        function redo() { if(historyStep<history.length-1){historyStep++; restoreHistoryState();} }
+        function restoreHistoryState() { const i=new Image(); i.src=history[historyStep]; i.onload=()=>{drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height); const p=drawCtx.globalCompositeOperation; drawCtx.globalCompositeOperation='source-over'; drawCtx.drawImage(i,0,0); drawCtx.globalCompositeOperation=p; updateButtons(); autoSave();}; }
+        function updateButtons() { btns.undo.disabled=(historyStep<=0); btns.redo.disabled=(historyStep>=history.length-1); }
     </script>
 </body>
 </html>
