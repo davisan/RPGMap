@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Criador de Mapas RPG - Persistente</title>
+    <style>
+        /* --- ESTILOS GERAIS (Mantidos e aprimorados) --- */
+        * { box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            background-color: #2c3e50;
+            color: white;
+            user-select: none;
+        }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            width: 280px; /* Ligeiramente mais largo para os novos botões */
+            background-color: #34495e;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            gap: 15px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.3);
+            z-index: 10;
+            overflow-y: auto;
+        }
+
+        .sidebar h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.2rem;
+            text-align: center;
+            border-bottom: 2px solid #2ecc71;
+            padding-bottom: 10px;
+        }
+
+        .control-group {
+            background: rgba(0,0,0,0.2);
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        .control-group h3 {
+            margin: 0 0 8px 0;
+            font-size: 0.9rem;
+            color: #bdc3c7;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .input-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .input-row label { font-size: 0.85rem; color: #ecf0f1; }
+
+        input[type="number"], select {
+            width: 70px;
+            padding: 4px;
+            border-radius: 3px;
+            border: none;
+            background: #ecf0f1;
+        }
+
+        input[type="range"] { width: 100%; cursor: pointer; }
+        
+        input[type="color"] {
+            border: none;
+            width: 100%;
+            height: 30px;
+            cursor: pointer;
+            padding: 0;
+            background: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 5px;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+        button:hover { filter: brightness(1.1); }
+        
+        /* Cores específicas para botões de arquivo */
+        .file-btn { background-color: #8e44ad; } /* Roxo */
+        .save-img-btn { background-color: #2980b9; } /* Azul */
+        .reset-btn { background-color: #c0392b; } /* Vermelho */
+
+        /* Botões de Ferramentas */
+        .tools-row { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
+        
+        .tool-btn {
+            background-color: #7f8c8d;
+            margin-top: 0;
+            flex: 1;
+        }
+
+        .tool-btn.active {
+            background-color: #3498db;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+            border: 2px solid #2980b9;
+        }
+
+        .action-buttons { display: flex; gap: 5px; margin-top: 5px; }
+        .action-buttons button { background-color: #f39c12; margin-top: 0; }
+        .action-buttons button:disabled { background-color: #7f8c8d; cursor: not-allowed; opacity: 0.6; }
+
+        /* --- VIEWPORT --- */
+        .viewport {
+            flex-grow: 1;
+            background-color: #95a5a6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            position: relative;
+            padding: 20px;
+        }
+        
+        .viewport::before { content: ''; flex: 1; min-height: 100%; }
+
+        #map-container {
+            position: relative;
+            background-color: white;
+            box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            flex-shrink: 0;
+            margin: auto; 
+        }
+
+        canvas { position: absolute; top: 0; left: 0; }
+        #gridLayer { z-index: 1; pointer-events: none; }
+        #drawLayer { z-index: 2; }
+
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <h2>🗺️ RPG Map Maker</h2>
+        
+        <div class="control-group">
+            <h3>Arquivo</h3>
+            <div style="display: flex; gap: 5px;">
+                <button class="file-btn" onclick="saveProjectFile()">💾 Salvar</button>
+                <button class="file-btn" onclick="document.getElementById('fileInput').click()">📂 Carregar</button>
+                <input type="file" id="fileInput" accept=".json" style="display: none;" onchange="loadProjectFile(this)">
+            </div>
+            <button class="save-img-btn" onclick="exportImage()">📷 Baixar Imagem (PNG)</button>
+        </div>
+
+        <div class="control-group">
+            <h3>Configurar</h3>
+            <div class="input-row"><label>Largura</label><input type="number" id="mapCols" value="20" min="5" max="100"></div>
+            <div class="input-row"><label>Altura</label><input type="number" id="mapRows" value="15" min="5" max="100"></div>
+            <div class="input-row"><label>Célula (px)</label><input type="number" id="cellSize" value="40" min="10" max="100"></div>
+            <button class="reset-btn" onclick="resizeMap(true)">Novo Mapa (Limpar)</button>
+        </div>
+
+        <div class="control-group">
+            <h3>Grade</h3>
+            <div class="input-row"><label>Cor</label><div style="width: 60px;"><input type="color" id="gridColor" value="#cccccc" oninput="updateGrid()"></div></div>
+            <div class="input-row" style="flex-direction: column; align-items: flex-start;">
+                <label>Espessura</label><input type="range" id="gridWidth" min="1" max="5" value="1" oninput="updateGrid()">
+            </div>
+            <div class="input-row">
+                <label>Estilo</label>
+                <select id="gridPattern" onchange="updateGrid()">
+                    <option value="solid">Sólido</option>
+                    <option value="dashed">Tracejado</option>
+                    <option value="dotted">Pontilhado</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Ferramentas</h3>
+            <div class="tools-row">
+                <button id="btnPan" class="tool-btn" onclick="setTool('pan')">🖐 Mover</button>
+                <button id="btnBrush" class="tool-btn" onclick="setTool('brush')">🖌️ Pincel</button>
+                <button id="btnEraser" class="tool-btn" onclick="setTool('eraser')">🧽 Borracha</button>
+            </div>
+
+            <div class="input-row"><label>Cor Pincel</label><div style="width: 60px;"><input type="color" id="brushColor" value="#2c3e50"></div></div>
+            <div class="input-row" style="flex-direction: column; align-items: flex-start;">
+                <label>Tamanho</label><input type="range" id="brushSize" min="1" max="50" value="5">
+            </div>
+            
+            <div class="action-buttons">
+                <button onclick="undo()" id="btnUndo" title="Ctrl+Z">↶ Undo</button>
+                <button onclick="redo()" id="btnRedo" title="Ctrl+Y">↷ Redo</button>
+            </div>
+        </div>
+    </aside>
+
+    <main class="viewport" id="mainViewport">
+        <div id="map-container">
+            <canvas id="gridLayer"></canvas>
+            <canvas id="drawLayer"></canvas>
+        </div>
+    </main>
+
+    <script>
+        // --- CONSTANTES E ELEMENTOS ---
+        const LOCAL_STORAGE_KEY = 'rpgMapData_v1';
+        const viewport = document.getElementById('mainViewport');
+        const container = document.getElementById('map-container');
+        const gridCanvas = document.getElementById('gridLayer');
+        const drawCanvas = document.getElementById('drawLayer');
+        const gridCtx = gridCanvas.getContext('2d');
+        const drawCtx = drawCanvas.getContext('2d');
+        
+        const inputs = {
+            cols: document.getElementById('mapCols'),
+            rows: document.getElementById('mapRows'),
+            cellSize: document.getElementById('cellSize'),
+            gridColor: document.getElementById('gridColor'),
+            gridWidth: document.getElementById('gridWidth'),
+            gridPattern: document.getElementById('gridPattern'),
+            brushColor: document.getElementById('brushColor'),
+            brushSize: document.getElementById('brushSize')
+        };
+
+        const btns = {
+            pan: document.getElementById('btnPan'),
+            brush: document.getElementById('btnBrush'),
+            eraser: document.getElementById('btnEraser'),
+            undo: document.getElementById('btnUndo'),
+            redo: document.getElementById('btnRedo')
+        };
+
+        // --- ESTADO ---
+        let state = {
+            isDrawing: false,
+            isPanning: false,
+            tool: 'pan',
+            lastX: 0, lastY: 0,
+            panStartX: 0, panStartY: 0,
+            scrollStartX: 0, scrollStartY: 0
+        };
+
+        let history = [];
+        let historyStep = -1;
+
+        // --- INICIALIZAÇÃO E PERSISTÊNCIA ---
+
+        window.onload = () => {
+            // Tenta carregar do localStorage, senão cria novo
+            if (!loadFromLocalStorage()) {
+                resizeMap(true);
+            }
+            setTool('pan');
+        };
+
+        // Salva estado atual no navegador
+        function autoSave() {
+            const data = {
+                cols: inputs.cols.value,
+                rows: inputs.rows.value,
+                cellSize: inputs.cellSize.value,
+                gridColor: inputs.gridColor.value,
+                gridWidth: inputs.gridWidth.value,
+                gridPattern: inputs.gridPattern.value,
+                image: drawCanvas.toDataURL() // Salva o desenho como Base64
+            };
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+        }
+
+        // Carrega do navegador
+        function loadFromLocalStorage() {
+            const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (!saved) return false;
+
+            try {
+                const data = JSON.parse(saved);
+                applyMapData(data);
+                return true;
+            } catch (e) {
+                console.error("Erro ao carregar save:", e);
+                return false;
+            }
+        }
+
+        // Aplica os dados (usado pelo Load Local e Load Arquivo)
+        function applyMapData(data) {
+            // Restaura inputs
+            inputs.cols.value = data.cols;
+            inputs.rows.value = data.rows;
+            inputs.cellSize.value = data.cellSize;
+            inputs.gridColor.value = data.gridColor || '#cccccc';
+            inputs.gridWidth.value = data.gridWidth || 1;
+            inputs.gridPattern.value = data.gridPattern || 'solid';
+
+            // Redimensiona (sem limpar o histórico ainda)
+            resizeCanvasStruct();
+            drawGrid();
+
+            // Restaura a imagem do desenho
+            if (data.image) {
+                const img = new Image();
+                img.src = data.image;
+                img.onload = () => {
+                    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+                    drawCtx.drawImage(img, 0, 0);
+                    // Reinicia histórico com essa imagem como base
+                    history = [drawCanvas.toDataURL()];
+                    historyStep = 0;
+                    updateButtons();
+                };
+            }
+        }
+
+        // --- ARQUIVOS (SALVAR/CARREGAR/EXPORTAR) ---
+
+        function saveProjectFile() {
+            const data = {
+                cols: inputs.cols.value,
+                rows: inputs.rows.value,
+                cellSize: inputs.cellSize.value,
+                gridColor: inputs.gridColor.value,
+                gridWidth: inputs.gridWidth.value,
+                gridPattern: inputs.gridPattern.value,
+                image: drawCanvas.toDataURL()
+            };
+            const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "mapa-rpg.json";
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function loadProjectFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    applyMapData(data);
+                    autoSave(); // Persiste o que acabou de carregar
+                } catch (err) {
+                    alert("Erro ao ler o arquivo de mapa.");
+                }
+            };
+            reader.readAsText(file);
+            input.value = ''; // Limpa para permitir recarregar o mesmo arquivo
+        }
+
+        function exportImage() {
+            // Cria um canvas temporário para juntar Grade + Desenho
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = drawCanvas.width;
+            tempCanvas.height = drawCanvas.height;
+            const tCtx = tempCanvas.getContext('2d');
+
+            // Fundo branco
+            tCtx.fillStyle = "#ffffff";
+            tCtx.fillRect(0,0, tempCanvas.width, tempCanvas.height);
+            
+            // Desenha grade
+            tCtx.drawImage(gridCanvas, 0, 0);
+            // Desenha traços
+            tCtx.drawImage(drawCanvas, 0, 0);
+
+            // Download
+            const link = document.createElement('a');
+            link.download = 'mapa-rpg-export.png';
+            link.href = tempCanvas.toDataURL();
+            link.click();
+        }
+
+        // --- LÓGICA DO MAPA ---
+
+        function updateGrid() {
+            drawGrid();
+            autoSave();
+        }
+
+        function resizeCanvasStruct() {
+            const cols = parseInt(inputs.cols.value);
+            const rows = parseInt(inputs.rows.value);
+            const size = parseInt(inputs.cellSize.value);
+            const width = cols * size;
+            const height = rows * size;
+
+            container.style.width = width + 'px';
+            container.style.height = height + 'px';
+
+            // Nota: Mudar width/height do canvas limpa o conteúdo
+            gridCanvas.width = width;
+            gridCanvas.height = height;
+            drawCanvas.width = width;
+            drawCanvas.height = height;
+        }
+
+        function resizeMap(clear = false) {
+            if (clear && !confirm("Isso apagará todo o desenho atual. Continuar?")) return;
+            
+            resizeCanvasStruct();
+            drawGrid();
+            
+            if (clear) {
+                drawCtx.clearRect(0,0, drawCanvas.width, drawCanvas.height);
+                history = [];
+                historyStep = -1;
+                saveHistoryState(); // Salva estado em branco
+                autoSave();
+            }
+        }
+
+        function drawGrid() {
+            const width = gridCanvas.width;
+            const height = gridCanvas.height;
+            const size = parseInt(inputs.cellSize.value);
+
+            gridCtx.clearRect(0, 0, width, height);
+            gridCtx.beginPath();
+            gridCtx.strokeStyle = inputs.gridColor.value;
+            gridCtx.lineWidth = inputs.gridWidth.value;
+
+            const pattern = inputs.gridPattern.value;
+            if (pattern === 'dashed') gridCtx.setLineDash([10, 5]);
+            else if (pattern === 'dotted') gridCtx.setLineDash([2, 3]);
+            else gridCtx.setLineDash([]);
+
+            for (let x = 0; x <= width; x += size) { gridCtx.moveTo(x, 0); gridCtx.lineTo(x, height); }
+            for (let y = 0; y <= height; y += size) { gridCtx.moveTo(0, y); gridCtx.lineTo(width, y); }
+            gridCtx.stroke();
+        }
+
+        // --- FERRAMENTAS E MOUSE ---
+
+        function setTool(toolName) {
+            state.tool = toolName;
+            
+            // UI
+            Object.values(btns).forEach(b => { if(b.classList) b.classList.remove('active'); });
+            if (btns[toolName]) btns[toolName].classList.add('active');
+
+            // Cursor
+            if (toolName === 'pan') drawCanvas.style.cursor = 'grab';
+            else if (toolName === 'brush') drawCanvas.style.cursor = 'crosshair';
+            else if (toolName === 'eraser') drawCanvas.style.cursor = 'cell';
+        }
+
+        // --- HISTÓRICO (UNDO/REDO) ---
+        function saveHistoryState() {
+            historyStep++;
+            if (historyStep < history.length) history.length = historyStep;
+            history.push(drawCanvas.toDataURL());
+            updateButtons();
+        }
+
+        function undo() {
+            if (historyStep > 0) { historyStep--; restoreHistoryState(); }
+        }
+
+        function redo() {
+            if (historyStep < history.length - 1) { historyStep++; restoreHistoryState(); }
+        }
+
+        function restoreHistoryState() {
+            const img = new Image();
+            img.src = history[historyStep];
+            img.onload = () => {
+                drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+                const prev = drawCtx.globalCompositeOperation;
+                drawCtx.globalCompositeOperation = 'source-over';
+                drawCtx.drawImage(img, 0, 0);
+                drawCtx.globalCompositeOperation = prev;
+                updateButtons();
+                autoSave(); // Salva após undo/redo
+            };
+        }
+
+        function updateButtons() {
+            btns.undo.disabled = (historyStep <= 0);
+            btns.redo.disabled = (historyStep >= history.length - 1);
+        }
+
+        // --- EVENTOS DE INPUT (MOUSE) ---
+
+        drawCanvas.addEventListener('mousedown', (e) => {
+            if (e.buttons !== 1) return;
+            
+            if (state.tool === 'pan') {
+                state.isPanning = true;
+                drawCanvas.style.cursor = 'grabbing';
+                state.panStartX = e.pageX;
+                state.panStartY = e.pageY;
+                state.scrollStartX = viewport.scrollLeft;
+                state.scrollStartY = viewport.scrollTop;
+            } else {
+                state.isDrawing = true;
+                [state.lastX, state.lastY] = getMousePos(e);
+                performDraw(e); // Ponto inicial
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (state.tool === 'pan') {
+                if (!state.isPanning) return;
+                e.preventDefault();
+                const walkX = e.pageX - state.panStartX;
+                const walkY = e.pageY - state.panStartY;
+                viewport.scrollLeft = state.scrollStartX - walkX;
+                viewport.scrollTop = state.scrollStartY - walkY;
+            } else {
+                if (!state.isDrawing) return;
+                performDraw(e);
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (state.isPanning) {
+                state.isPanning = false;
+                drawCanvas.style.cursor = 'grab';
+            }
+            if (state.isDrawing) {
+                state.isDrawing = false;
+                saveHistoryState();
+                autoSave(); // Importante: Salva no LocalStorage ao terminar o traço
+            }
+        });
+
+        function performDraw(e) {
+            const [currX, currY] = getMousePos(e);
+            drawCtx.beginPath();
+            drawCtx.moveTo(state.lastX, state.lastY);
+            drawCtx.lineTo(currX, currY);
+            
+            drawCtx.lineWidth = inputs.brushSize.value;
+            drawCtx.lineCap = 'round';
+            drawCtx.lineJoin = 'round';
+
+            if (state.tool === 'brush') {
+                drawCtx.globalCompositeOperation = 'source-over';
+                drawCtx.strokeStyle = inputs.brushColor.value;
+            } else {
+                drawCtx.globalCompositeOperation = 'destination-out';
+                drawCtx.strokeStyle = "rgba(0,0,0,1)";
+            }
+            
+            drawCtx.stroke();
+            [state.lastX, state.lastY] = [currX, currY];
+        }
+
+        function getMousePos(evt) {
+            const rect = drawCanvas.getBoundingClientRect();
+            return [evt.clientX - rect.left, evt.clientY - rect.top];
+        }
+
+        // Atalhos
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+            else if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
+        });
+
+    </script>
+</body>
+</html>
