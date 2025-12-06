@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Criador de Mapas RPG - Com Fundo</title>
+    <title>RPG Map Maker - Grid Offset</title>
     <style>
-        /* --- ESTILOS GERAIS E LAYOUT FIXO (Mantidos) --- */
+        /* --- ESTILOS GERAIS --- */
         * { box-sizing: border-box; }
         html, body {
             margin: 0; padding: 0; width: 100%; height: 100%; 
@@ -15,125 +15,209 @@
         }
         body { display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
 
+        /* --- BOTÃO MENU --- */
+        #toggleBtn {
+            position: absolute; top: 10px; left: 10px; z-index: 100;
+            width: 44px; height: 44px;
+            background-color: #34495e; border: 2px solid #2ecc71; color: #2ecc71;
+            border-radius: 8px; font-size: 1.5rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+
         /* --- SIDEBAR --- */
         .sidebar {
-            width: 280px; background-color: #34495e; display: flex; flex-direction: column;
-            padding: 15px; gap: 15px; box-shadow: 2px 0 5px rgba(0,0,0,0.3); z-index: 10;
+            width: 300px; 
+            background-color: #34495e; 
+            display: flex; flex-direction: column;
+            padding: 10px; padding-top: 65px;
+            gap: 8px; 
+            box-shadow: 2px 0 5px rgba(0,0,0,0.3); z-index: 10;
             overflow-y: auto; touch-action: pan-y;
+            transition: transform 0.3s ease;
         }
-        .sidebar h2 { margin: 0 0 10px 0; font-size: 1.2rem; text-align: center; border-bottom: 2px solid #2ecc71; padding-bottom: 10px; }
-        .control-group { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; }
-        .control-group h3 { margin: 0 0 8px 0; font-size: 0.9rem; color: #bdc3c7; text-transform: uppercase; }
-        .input-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .input-row label { font-size: 0.85rem; color: #ecf0f1; }
-        input[type="number"], select { width: 70px; padding: 6px; border-radius: 3px; border: none; background: #ecf0f1; }
-        input[type="range"] { width: 100%; height: 20px; }
-        input[type="color"] { border: none; width: 100%; height: 35px; padding: 0; background: none; }
+        .sidebar.closed { transform: translateX(-100%); }
 
-        /* Botões */
-        button {
-            width: 100%; padding: 12px; background-color: #27ae60; color: white;
-            border: none; border-radius: 4px; font-weight: bold; margin-top: 5px; font-size: 0.9rem;
+        /* Acordeões */
+        details { background: rgba(0,0,0,0.2); border-radius: 6px; overflow: hidden; }
+        summary {
+            padding: 12px; font-weight: bold; cursor: pointer;
+            background-color: rgba(255,255,255,0.05); list-style: none;
+            display: flex; justify-content: space-between; align-items: center;
+            text-transform: uppercase; font-size: 0.85rem; color: #bdc3c7;
         }
-        button:active { filter: brightness(0.9); transform: scale(0.98); }
-        .file-btn { background-color: #8e44ad; flex: 1; }
-        .bg-btn { background-color: #d35400; flex: 1; font-size: 0.8rem;} /* Botão laranja para fundo */
-        .save-img-btn { background-color: #2980b9; }
-        .reset-btn { background-color: #c0392b; }
+        summary::after { content: '+'; font-size: 1.2rem; font-weight: bold; }
+        details[open] summary::after { content: '-'; }
+        details[open] summary { border-bottom: 1px solid rgba(255,255,255,0.1); color: #2ecc71; }
+        .group-content { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+        /* Inputs e Layout */
+        .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+        .row-input { display: flex; justify-content: space-between; align-items: center; }
+
+        label { font-size: 0.85rem; color: #ecf0f1; }
         
-        /* Ferramentas */
-        .tools-row { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
-        .tool-btn { background-color: #7f8c8d; flex: 1; padding: 15px 5px; }
-        .tool-btn.active { background-color: #3498db; border: 2px solid #2980b9; }
-        .action-buttons { display: flex; gap: 5px; margin-top: 5px; }
-        .action-buttons button { background-color: #f39c12; }
-        .action-buttons button:disabled { background-color: #7f8c8d; opacity: 0.6; }
+        input[type="number"], select { width: 70px; padding: 8px; border-radius: 4px; border: none; background: #ecf0f1; text-align: center;}
+        input[type="text"] { width: 100%; padding: 10px; border-radius: 4px; border: none; background: #ecf0f1; }
+        input[type="range"] { flex-grow: 1; height: 30px; margin-left: 10px; cursor: pointer; }
+        input[type="color"] { border: none; width: 100%; height: 35px; padding: 0; background: none; cursor: pointer; border-radius: 4px;}
 
-        /* --- VIEWPORT E CAMADAS --- */
+        button {
+            width: 100%; padding: 12px; border: none; border-radius: 6px; 
+            font-weight: bold; font-size: 0.9rem; cursor: pointer; color: white; transition: filter 0.2s;
+        }
+        button:active { filter: brightness(0.8); transform: translateY(1px); }
+
+        .btn-green { background-color: #27ae60; }
+        .btn-blue { background-color: #2980b9; }
+        .btn-purple { background-color: #8e44ad; }
+        .btn-orange { background-color: #d35400; }
+        .btn-red { background-color: #c0392b; }
+        .btn-gray { background-color: #7f8c8d; }
+        .btn-teal { background-color: #16a085; }
+        
+        .tool-btn { background-color: #7f8c8d; padding: 15px 5px; font-size: 1.2rem; }
+        .tool-btn.active { background-color: #3498db; border: 2px solid #2980b9; box-shadow: inset 0 0 5px rgba(0,0,0,0.5); }
+
+        /* --- VIEWPORT --- */
         .viewport {
             flex-grow: 1; background-color: #95a5a6; display: flex;
             justify-content: center; align-items: center; overflow: hidden;
-            position: relative; touch-action: none;
+            position: relative; width: 100%;
         }
         #content-wrapper { position: absolute; top: 0; left: 0; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
-        #map-container { position: relative; background-color: white; flex-shrink: 0; }
+        #map-container { position: relative; background-color: white; flex-shrink: 0; overflow: hidden; }
+
+        #videoContainer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+        #ytFrame { width: 100%; height: 100%; border: none; display: none; }
+        #localVideo { width: 100%; height: 100%; object-fit: cover; display: none; }
 
         canvas { position: absolute; top: 0; left: 0; }
-        
-        /* Ordem das Camadas */
-        #bgLayer { z-index: 0; pointer-events: none; }   /* Fundo (atrás de tudo) */
-        #gridLayer { z-index: 1; pointer-events: none; } /* Grade (meio) */
-        #drawLayer { z-index: 2; }                       /* Desenho (frente, recebe cliques) */
+        #bgLayer { z-index: 1; pointer-events: none; }
+        #gridLayer { z-index: 2; pointer-events: none; }
+        #drawLayer { z-index: 3; }
 
     </style>
 </head>
 <body>
 
-    <aside class="sidebar">
-        <h2>🗺️ RPG Map Maker</h2>
+    <button id="toggleBtn" onclick="toggleSidebar()">☰</button>
+
+    <aside class="sidebar" id="sidebar">
         
-        <div class="control-group">
-            <h3>Arquivo & Fundo</h3>
-            <div style="display: flex; gap: 5px; margin-bottom: 5px;">
-                <button class="file-btn" onclick="saveProjectFile()">💾 Salvar</button>
-                <button class="file-btn" onclick="document.getElementById('fileInput').click()">📂 Abrir</button>
+        <details open>
+            <summary>Ferramentas</summary>
+            <div class="group-content">
+                <div class="row-3">
+                    <button id="btnPan" class="tool-btn" onclick="setTool('pan')">🖐</button>
+                    <button id="btnBrush" class="tool-btn" onclick="setTool('brush')">🖌️</button>
+                    <button id="btnEraser" class="tool-btn" onclick="setTool('eraser')">🧽</button>
+                </div>
+                <div class="row-input">
+                    <div style="width: 50px;"><input type="color" id="brushColor" value="#2c3e50"></div>
+                    <input type="range" id="brushSize" min="1" max="50" value="5">
+                </div>
+                <div class="row-2">
+                    <button onclick="undo()" id="btnUndo" class="btn-orange">↶ Undo</button>
+                    <button onclick="redo()" id="btnRedo" class="btn-orange">↷ Redo</button>
+                </div>
+            </div>
+        </details>
+
+        <details>
+            <summary>Configuração Grade</summary>
+            <div class="group-content">
+                <div class="row-input">
+                    <label>L x A</label>
+                    <div style="display:flex; gap:5px;">
+                        <input type="number" id="mapCols" value="20">
+                        <input type="number" id="mapRows" value="15">
+                    </div>
+                </div>
+                <div class="row-input">
+                    <label>Célula</label>
+                    <input type="number" id="cellSize" value="40">
+                </div>
+                <button class="btn-green" onclick="resizeMap()">Aplicar Tamanho</button>
+                
+                <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0;"></div>
+
+                <div class="row-input">
+                    <label>Cor / Tipo</label>
+                    <div style="width: 40px;"><input type="color" id="gridColor" value="#cccccc" oninput="updateGrid()"></div>
+                    <select id="gridPattern" onchange="updateGrid()" style="flex-grow:1; margin-left:5px;">
+                        <option value="solid">Sólido</option>
+                        <option value="dashed">Traço</option>
+                        <option value="dotted">Ponto</option>
+                    </select>
+                </div>
+                <div class="row-input">
+                    <label>Espessura</label>
+                    <input type="range" id="gridWidth" min="1" max="5" value="1" oninput="updateGrid()">
+                </div>
+
+                <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0;"></div>
+
+                <div class="row-input">
+                    <label>Deslocar X/Y</label>
+                    <div style="display:flex; gap:5px;">
+                        <input type="number" id="gridOffsetX" value="0" oninput="updateGrid()" title="Offset Horizontal">
+                        <input type="number" id="gridOffsetY" value="0" oninput="updateGrid()" title="Offset Vertical">
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <details>
+            <summary>Fundo & Mídia</summary>
+            <div class="group-content">
+                <label>Imagem Estática</label>
+                <div class="row-input">
+                    <button class="btn-orange" onclick="document.getElementById('bgInput').click()">🖼️ Carregar</button>
+                    <button class="btn-gray" onclick="clearBackground()" style="width: 50px; margin-left: 5px;">❌</button>
+                </div>
+                <input type="file" id="bgInput" accept="image/*" style="display: none;" onchange="loadBackground(this)">
+
+                <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0;"></div>
+
+                <label>Vídeo Local (PC)</label>
+                <div class="row-input">
+                    <button class="btn-teal" onclick="document.getElementById('videoInput').click()">📂 Vídeo</button>
+                    <button class="btn-gray" onclick="clearVideo()" style="width: 50px; margin-left: 5px;">❌</button>
+                </div>
+                <input type="file" id="videoInput" accept="video/*" style="display: none;" onchange="loadLocalVideo(this)">
+
+                <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0;"></div>
+
+                <label>YouTube Link</label>
+                <input type="text" id="ytUrl" placeholder="Cole o link aqui...">
+                <button class="btn-red" onclick="setYoutubeBackground()">▶️ Aplicar YT</button>
+            </div>
+        </details>
+
+        <details>
+            <summary>Arquivo</summary>
+            <div class="group-content">
+                <div class="row-2">
+                    <button class="btn-purple" onclick="saveProjectFile()">💾 Salvar</button>
+                    <button class="btn-purple" onclick="document.getElementById('fileInput').click()">📂 Abrir</button>
+                </div>
                 <input type="file" id="fileInput" accept=".json" style="display: none;" onchange="loadProjectFile(this)">
+                <button class="btn-blue" onclick="exportImage()">📷 Baixar PNG</button>
+                <button class="btn-red" onclick="resizeMap(true)">🗑️ Novo Mapa</button>
             </div>
-            <div style="display: flex; gap: 5px;">
-                <button class="bg-btn" onclick="document.getElementById('bgInput').click()">🖼️ Pôr Fundo</button>
-                <button class="bg-btn" onclick="clearBackground()" style="background-color: #c0392b;">❌ Tirar</button>
-                 <input type="file" id="bgInput" accept="image/*" style="display: none;" onchange="loadBackground(this)">
-            </div>
-             <button class="save-img-btn" onclick="exportImage()" style="margin-top: 10px;">📷 Baixar Imagem Final</button>
-        </div>
+        </details>
 
-        <div class="control-group">
-            <h3>Configurar Mapa</h3>
-            <div class="input-row"><label>Largura</label><input type="number" id="mapCols" value="20" min="5" max="100"></div>
-            <div class="input-row"><label>Altura</label><input type="number" id="mapRows" value="15" min="5" max="100"></div>
-            <div class="input-row"><label>Célula</label><input type="number" id="cellSize" value="40" min="10" max="100"></div>
-            <button class="reset-btn" onclick="resizeMap(true)">Novo Mapa (Limpar)</button>
-        </div>
-
-        <div class="control-group">
-            <h3>Grade</h3>
-            <div class="input-row"><label>Cor</label><div style="width: 60px;"><input type="color" id="gridColor" value="#cccccc" oninput="updateGrid()"></div></div>
-            <div class="input-row" style="flex-direction: column; align-items: flex-start;">
-                <label>Espessura</label><input type="range" id="gridWidth" min="1" max="5" value="1" oninput="updateGrid()">
-            </div>
-            <div class="input-row">
-                <label>Estilo</label>
-                <select id="gridPattern" onchange="updateGrid()">
-                    <option value="solid">Sólido</option>
-                    <option value="dashed">Tracejado</option>
-                    <option value="dotted">Pontilhado</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="control-group">
-            <h3>Ferramentas</h3>
-            <div class="tools-row">
-                <button id="btnPan" class="tool-btn" onclick="setTool('pan')">🖐 Mover</button>
-                <button id="btnBrush" class="tool-btn" onclick="setTool('brush')">🖌️ Pincel</button>
-                <button id="btnEraser" class="tool-btn" onclick="setTool('eraser')">🧽 Borracha</button>
-            </div>
-
-            <div class="input-row"><label>Cor Pincel</label><div style="width: 60px;"><input type="color" id="brushColor" value="#2c3e50"></div></div>
-            <div class="input-row" style="flex-direction: column; align-items: flex-start;">
-                <label>Tamanho</label><input type="range" id="brushSize" min="1" max="50" value="5">
-            </div>
-            
-            <div class="action-buttons">
-                <button onclick="undo()" id="btnUndo" title="Undo">↶ Undo</button>
-                <button onclick="redo()" id="btnRedo" title="Redo">↷ Redo</button>
-            </div>
-        </div>
     </aside>
 
     <main class="viewport" id="mainViewport">
         <div id="content-wrapper">
             <div id="map-container">
+                <div id="videoContainer">
+                    <iframe id="ytFrame" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                    <video id="localVideo" loop muted playsinline></video>
+                </div>
                 <canvas id="bgLayer"></canvas>
                 <canvas id="gridLayer"></canvas>
                 <canvas id="drawLayer"></canvas>
@@ -142,73 +226,168 @@
     </main>
 
     <script>
-        // --- CONFIGURAÇÃO E REFERÊNCIAS ---
-        const LOCAL_STORAGE_KEY = 'rpgMapData_v2_bg';
+        const LOCAL_STORAGE_KEY = 'rpgMapData_v8_offset';
+        
+        // --- ELEMENTOS ---
+        const sidebar = document.getElementById('sidebar');
         const viewport = document.getElementById('mainViewport');
         const contentWrapper = document.getElementById('content-wrapper');
         const container = document.getElementById('map-container');
+        const ytFrame = document.getElementById('ytFrame');
+        const localVideo = document.getElementById('localVideo');
         
-        // Referências aos 3 Canvas
         const bgCanvas = document.getElementById('bgLayer');
         const gridCanvas = document.getElementById('gridLayer');
         const drawCanvas = document.getElementById('drawLayer');
-        
         const bgCtx = bgCanvas.getContext('2d');
         const gridCtx = gridCanvas.getContext('2d');
         const drawCtx = drawCanvas.getContext('2d');
         
+        // --- INPUTS ---
         const inputs = {
-            cols: document.getElementById('mapCols'), rows: document.getElementById('mapRows'), cellSize: document.getElementById('cellSize'),
-            gridColor: document.getElementById('gridColor'), gridWidth: document.getElementById('gridWidth'), gridPattern: document.getElementById('gridPattern'),
-            brushColor: document.getElementById('brushColor'), brushSize: document.getElementById('brushSize')
+            cols: document.getElementById('mapCols'), 
+            rows: document.getElementById('mapRows'), 
+            cellSize: document.getElementById('cellSize'),
+            gridColor: document.getElementById('gridColor'),
+            gridWidth: document.getElementById('gridWidth'),
+            gridPattern: document.getElementById('gridPattern'),
+            // NOVO: OFFSETS
+            gridOffsetX: document.getElementById('gridOffsetX'),
+            gridOffsetY: document.getElementById('gridOffsetY'),
+            
+            brushColor: document.getElementById('brushColor'), 
+            brushSize: document.getElementById('brushSize'),
+            ytUrl: document.getElementById('ytUrl')
         };
+        
         const btns = {
-            pan: document.getElementById('btnPan'), brush: document.getElementById('btnBrush'), eraser: document.getElementById('btnEraser'),
-            undo: document.getElementById('btnUndo'), redo: document.getElementById('btnRedo')
+            pan: document.getElementById('btnPan'), 
+            brush: document.getElementById('btnBrush'), 
+            eraser: document.getElementById('btnEraser'),
+            undo: document.getElementById('btnUndo'), 
+            redo: document.getElementById('btnRedo')
         };
 
-        // --- ESTADO DO APLICATIVO ---
+        // --- ESTADO ---
         let state = {
             isActionActive: false, tool: 'pan',
-            lastX: 0, lastY: 0,
-            panStartX: 0, panStartY: 0, offsetX: 50, offsetY: 50,
-            bgImageSrc: null // Armazena a imagem de fundo atual (Base64)
+            lastX: 0, lastY: 0, panStartX: 0, panStartY: 0, offsetX: 50, offsetY: 50,
+            bgImageSrc: null, youtubeID: null, hasLocalVideo: false
         };
-
         let history = []; let historyStep = -1;
 
-        // --- INICIALIZAÇÃO ---
+        // --- INIT ---
         window.onload = () => {
             if (!loadFromLocalStorage()) { resizeMap(true); } else { updateViewTransform(); }
             setTool('pan');
         };
 
-        // --- LÓGICA DE INPUT (TOUCH/MOUSE) ---
+        function toggleSidebar() { sidebar.classList.toggle('closed'); }
+
+        // --- DESENHO DA GRADE COM OFFSET ---
+        function drawGrid() {
+            const w = gridCanvas.width;
+            const h = gridCanvas.height;
+            const s = parseInt(inputs.cellSize.value);
+            
+            // Novos valores de deslocamento
+            const offX = parseInt(inputs.gridOffsetX.value) || 0;
+            const offY = parseInt(inputs.gridOffsetY.value) || 0;
+
+            gridCtx.clearRect(0, 0, w, h);
+            gridCtx.beginPath();
+            
+            gridCtx.strokeStyle = inputs.gridColor.value;
+            gridCtx.lineWidth = inputs.gridWidth.value;
+
+            const p = inputs.gridPattern.value;
+            if (p === 'dashed') gridCtx.setLineDash([10, 5]);
+            else if (p === 'dotted') gridCtx.setLineDash([2, 3]);
+            else gridCtx.setLineDash([]); 
+
+            // Cálculo para desenhar a grade deslocada
+            // Começamos o loop um pouco antes de 0 para garantir que o deslocamento não deixa buracos
+            const startX = (offX % s) - s;
+            const startY = (offY % s) - s;
+
+            // Linhas Verticais
+            for (let x = startX; x <= w; x += s) {
+                // Adicionamos 0.5 para nitidez no canvas
+                gridCtx.moveTo(x + 0.5, 0); 
+                gridCtx.lineTo(x + 0.5, h);
+            }
+            // Linhas Horizontais
+            for (let y = startY; y <= h; y += s) {
+                gridCtx.moveTo(0, y + 0.5);
+                gridCtx.lineTo(w, y + 0.5);
+            }
+            gridCtx.stroke();
+        }
+
+        function updateGrid() { drawGrid(); autoSave(); }
+
+        // --- VÍDEO ---
+        function extractVideoID(url) {
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        }
+
+        function setYoutubeBackground() {
+            const url = inputs.ytUrl.value;
+            const videoID = extractVideoID(url);
+            if (videoID) {
+                state.youtubeID = videoID; state.hasLocalVideo = false;
+                renderVideoState(); autoSave();
+            } else { alert("Link inválido."); }
+        }
+
+        function loadLocalVideo(input) {
+            const file = input.files[0]; if (!file) return;
+            const fileURL = URL.createObjectURL(file);
+            localVideo.src = fileURL; localVideo.play();
+            state.hasLocalVideo = true; state.youtubeID = null; inputs.ytUrl.value = "";
+            renderVideoState();
+        }
+
+        function renderVideoState() {
+            ytFrame.style.display = 'none'; localVideo.style.display = 'none';
+            if (state.hasLocalVideo) { localVideo.style.display = 'block'; localVideo.play(); } 
+            else if (state.youtubeID) {
+                const embedUrl = `https://www.youtube.com/embed/${state.youtubeID}?autoplay=1&mute=1&controls=0&loop=1&playlist=${state.youtubeID}&playsinline=1`;
+                ytFrame.src = embedUrl; ytFrame.style.display = 'block';
+            } else { ytFrame.src = ""; localVideo.pause(); localVideo.removeAttribute('src'); }
+        }
+
+        function clearVideo() {
+            state.youtubeID = null; state.hasLocalVideo = false; inputs.ytUrl.value = '';
+            renderVideoState(); autoSave();
+        }
+
+        // --- INPUT HANDLING ---
         function getPointerPos(e) {
             const rect = drawCanvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return { x: clientX - rect.left, y: clientY - rect.top, rawX: clientX, rawY: clientY };
+            const cx = e.touches ? e.touches[0].clientX : e.clientX;
+            const cy = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: cx - rect.left, y: cy - rect.top, rawX: cx, rawY: cy };
         }
         function handleStart(e) {
+            if (e.target.closest('#toggleBtn')) return; 
             if (e.cancelable) e.preventDefault();
             state.isActionActive = true; const pos = getPointerPos(e);
             if (state.tool === 'pan') {
                 state.panStartX = pos.rawX - state.offsetX; state.panStartY = pos.rawY - state.offsetY; viewport.style.cursor = 'grabbing';
-            } else {
-                state.lastX = pos.x; state.lastY = pos.y; performDraw(pos.x, pos.y);
-            }
+            } else { state.lastX = pos.x; state.lastY = pos.y; performDraw(pos.x, pos.y); }
         }
         function handleMove(e) {
             if (!state.isActionActive) return; if (e.cancelable) e.preventDefault(); const pos = getPointerPos(e);
             if (state.tool === 'pan') { state.offsetX = pos.rawX - state.panStartX; state.offsetY = pos.rawY - state.panStartY; updateViewTransform(); } 
             else { performDraw(pos.x, pos.y); }
         }
-        function handleEnd(e) {
+        function handleEnd() {
             if (state.isActionActive) {
                 state.isActionActive = false;
-                if (state.tool === 'pan') { viewport.style.cursor = 'grab'; } 
-                else { saveHistoryState(); autoSave(); }
+                if (state.tool === 'pan') { viewport.style.cursor = 'grab'; } else { saveHistoryState(); autoSave(); }
             }
         }
         viewport.addEventListener('mousedown', handleStart); viewport.addEventListener('touchstart', handleStart, { passive: false });
@@ -224,25 +403,22 @@
             drawCtx.stroke(); [state.lastX, state.lastY] = [currX, currY];
         }
 
-        // --- ARQUIVOS E PERSISTÊNCIA ---
-        // Função auxiliar para coletar dados atuais
+        // --- ARQUIVOS E STORAGE ---
         function getCurrentMapData() {
             return {
                 cols: inputs.cols.value, rows: inputs.rows.value, cellSize: inputs.cellSize.value,
                 gridColor: inputs.gridColor.value, gridWidth: inputs.gridWidth.value, gridPattern: inputs.gridPattern.value,
-                image: drawCanvas.toDataURL(),
-                bgImage: state.bgImageSrc // Inclui o fundo no salvamento
+                // Salvar Offsets
+                gridOffsetX: inputs.gridOffsetX.value, gridOffsetY: inputs.gridOffsetY.value,
+                image: drawCanvas.toDataURL(), bgImage: state.bgImageSrc, youtubeID: state.youtubeID
             };
         }
-
         function autoSave() { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(getCurrentMapData())); }
-        
         function saveProjectFile() {
             const data = getCurrentMapData();
             const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
-            const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = "mapa-rpg-bg.json"; a.click(); URL.revokeObjectURL(url);
+            const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = "mapa.json"; a.click(); URL.revokeObjectURL(url);
         }
-
         function loadFromLocalStorage() {
             const saved = localStorage.getItem(LOCAL_STORAGE_KEY); if (!saved) return false;
             try { applyMapData(JSON.parse(saved)); return true; } catch (e) { return false; }
@@ -253,14 +429,16 @@
             reader.onload = (e) => { try { applyMapData(JSON.parse(e.target.result)); autoSave(); } catch (err) { alert("Erro ao ler arquivo."); } };
             reader.readAsText(file); input.value = '';
         }
-
         function applyMapData(data) {
             inputs.cols.value = data.cols; inputs.rows.value = data.rows; inputs.cellSize.value = data.cellSize;
             inputs.gridColor.value = data.gridColor || '#cccccc'; inputs.gridWidth.value = data.gridWidth || 1; inputs.gridPattern.value = data.gridPattern || 'solid';
-            state.bgImageSrc = data.bgImage || null; // Carrega o fundo
-            resizeCanvasStruct(); 
-            drawGrid();
-            drawBackground(); // Desenha o fundo carregado
+            // Carregar Offsets
+            inputs.gridOffsetX.value = data.gridOffsetX || 0;
+            inputs.gridOffsetY.value = data.gridOffsetY || 0;
+
+            state.bgImageSrc = data.bgImage || null; state.youtubeID = data.youtubeID || null;
+            if(state.youtubeID) inputs.ytUrl.value = `https://youtube.com/watch?v=${state.youtubeID}`;
+            resizeCanvasStruct(); drawGrid(); drawBackground(); renderVideoState();
             if (data.image) {
                 const img = new Image(); img.src = data.image;
                 img.onload = () => {
@@ -269,85 +447,45 @@
                 };
             }
         }
-
-        // --- NOVA FUNCIONALIDADE: IMAGEM DE FUNDO ---
+        
         function loadBackground(input) {
             const file = input.files[0]; if (!file) return;
             const reader = new FileReader();
-            reader.onload = (e) => {
-                state.bgImageSrc = e.target.result; // Salva a imagem em memória
-                drawBackground(); // Desenha no canvas de fundo
-                autoSave();
-            };
-            reader.readAsDataURL(file);
-            input.value = '';
+            reader.onload = (e) => { state.bgImageSrc = e.target.result; drawBackground(); autoSave(); };
+            reader.readAsDataURL(file); input.value = '';
         }
-
         function drawBackground() {
             bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
             if (!state.bgImageSrc) return;
-            const img = new Image();
-            img.src = state.bgImageSrc;
-            img.onload = () => {
-                // Desenha a imagem esticada para preencher todo o mapa
-                bgCtx.drawImage(img, 0, 0, bgCanvas.width, bgCanvas.height);
-            };
+            const img = new Image(); img.src = state.bgImageSrc;
+            img.onload = () => { bgCtx.drawImage(img, 0, 0, bgCanvas.width, bgCanvas.height); };
         }
+        function clearBackground() { state.bgImageSrc = null; drawBackground(); autoSave(); }
 
-        function clearBackground() {
-            state.bgImageSrc = null;
-            drawBackground();
-            autoSave();
-        }
-
-        // --- EXPORTAR IMAGEM FINAL ---
         function exportImage() {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = drawCanvas.width; tempCanvas.height = drawCanvas.height;
-            const tCtx = tempCanvas.getContext('2d');
-            tCtx.fillStyle = "#ffffff"; tCtx.fillRect(0,0, tempCanvas.width, tempCanvas.height);
-            
-            // Ordem de desenho importante: Fundo -> Grade -> Desenho
+            const tempCanvas = document.createElement('canvas'); tempCanvas.width = drawCanvas.width; tempCanvas.height = drawCanvas.height;
+            const tCtx = tempCanvas.getContext('2d'); tCtx.fillStyle = "#ffffff"; tCtx.fillRect(0,0, tempCanvas.width, tempCanvas.height);
             if (state.bgImageSrc) tCtx.drawImage(bgCanvas, 0, 0);
-            tCtx.drawImage(gridCanvas, 0, 0); 
-            tCtx.drawImage(drawCanvas, 0, 0);
-            
-            const link = document.createElement('a'); link.download = 'mapa-rpg-completo.png'; link.href = tempCanvas.toDataURL(); link.click();
+            tCtx.drawImage(gridCanvas, 0, 0); tCtx.drawImage(drawCanvas, 0, 0);
+            const link = document.createElement('a'); link.download = 'mapa-rpg.png'; link.href = tempCanvas.toDataURL(); link.click();
         }
 
-        // --- MAPA UTILS ---
-        function updateGrid() { drawGrid(); autoSave(); }
         function resizeCanvasStruct() {
             const w = parseInt(inputs.cols.value) * parseInt(inputs.cellSize.value); const h = parseInt(inputs.rows.value) * parseInt(inputs.cellSize.value);
             container.style.width = w + 'px'; container.style.height = h + 'px';
-            // Redimensiona todos os 3 canvas
-            bgCanvas.width = w; bgCanvas.height = h;
-            gridCanvas.width = w; gridCanvas.height = h;
-            drawCanvas.width = w; drawCanvas.height = h;
+            bgCanvas.width = w; bgCanvas.height = h; gridCanvas.width = w; gridCanvas.height = h; drawCanvas.width = w; drawCanvas.height = h;
         }
         function resizeMap(clear = false) {
-            if (clear && !confirm("Apagar desenho atual?")) return;
-            resizeCanvasStruct(); 
-            drawGrid();
-            drawBackground(); // Redesenha o fundo para se ajustar ao novo tamanho
+            if (clear && !confirm("Apagar tudo?")) return;
+            resizeCanvasStruct(); drawGrid(); drawBackground(); renderVideoState();
             if (clear) {
                 drawCtx.clearRect(0,0, drawCanvas.width, drawCanvas.height);
                 history = []; historyStep = -1; saveHistoryState(); autoSave();
                 state.offsetX = 50; state.offsetY = 50; updateViewTransform();
+                clearBackground(); clearVideo();
             }
         }
-        function drawGrid() {
-            const w = gridCanvas.width; const h = gridCanvas.height; const s = parseInt(inputs.cellSize.value);
-            gridCtx.clearRect(0, 0, w, h); gridCtx.beginPath();
-            gridCtx.strokeStyle = inputs.gridColor.value; gridCtx.lineWidth = inputs.gridWidth.value;
-            const p = inputs.gridPattern.value;
-            if (p === 'dashed') gridCtx.setLineDash([10, 5]); else if (p === 'dotted') gridCtx.setLineDash([2, 3]); else gridCtx.setLineDash([]);
-            for (let x = 0; x <= w; x += s) { gridCtx.moveTo(x, 0); gridCtx.lineTo(x, h); }
-            for (let y = 0; y <= h; y += s) { gridCtx.moveTo(0, y); gridCtx.lineTo(w, y); }
-            gridCtx.stroke();
-        }
-
-        // --- FERRAMENTAS E UNDO ---
+        
         function setTool(toolName) {
             state.tool = toolName; Object.values(btns).forEach(b => { if(b.classList) b.classList.remove('active'); });
             if (btns[toolName]) btns[toolName].classList.add('active');
