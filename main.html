@@ -3,153 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Criador de Mapas RPG - Touch</title>
+    <title>Criador de Mapas RPG - Com Fundo</title>
     <style>
+        /* --- ESTILOS GERAIS E LAYOUT FIXO (Mantidos) --- */
         * { box-sizing: border-box; }
-        
-        /* CORREÇÃO 1: Layout travado nas bordas para evitar que o menu corte */
         html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%; /* Usa 100% em vez de vh para mobile */
-            overflow: hidden; /* Impede scroll na página inteira */
-            background-color: #2c3e50;
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            overflow: hidden; background-color: #2c3e50;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: white;
-            /* Previne seleção de texto acidental ao tocar */
-            -webkit-user-select: none;
-            user-select: none; 
-            /* Previne comportamentos de toque nativos do browser */
-            touch-action: none; 
+            color: white; -webkit-user-select: none; user-select: none; touch-action: none; 
         }
-
-        body {
-            display: flex;
-            position: fixed; /* Trava o app na tela */
-            top: 0; left: 0; right: 0; bottom: 0;
-        }
+        body { display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
 
         /* --- SIDEBAR --- */
         .sidebar {
-            width: 280px;
-            background-color: #34495e;
-            display: flex;
-            flex-direction: column;
-            padding: 15px;
-            gap: 15px;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.3);
-            z-index: 10;
-            overflow-y: auto; /* Scroll interno apenas no menu */
-            touch-action: pan-y; /* Permite scroll vertical com dedo no menu */
+            width: 280px; background-color: #34495e; display: flex; flex-direction: column;
+            padding: 15px; gap: 15px; box-shadow: 2px 0 5px rgba(0,0,0,0.3); z-index: 10;
+            overflow-y: auto; touch-action: pan-y;
         }
-
-        .sidebar h2 {
-            margin: 0 0 10px 0;
-            font-size: 1.2rem;
-            text-align: center;
-            border-bottom: 2px solid #2ecc71;
-            padding-bottom: 10px;
-        }
-
-        .control-group {
-            background: rgba(0,0,0,0.2);
-            padding: 10px;
-            border-radius: 6px;
-        }
-
-        .control-group h3 {
-            margin: 0 0 8px 0;
-            font-size: 0.9rem;
-            color: #bdc3c7;
-            text-transform: uppercase;
-        }
-
-        .input-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px; /* Mais espaço para toque */
-        }
-
+        .sidebar h2 { margin: 0 0 10px 0; font-size: 1.2rem; text-align: center; border-bottom: 2px solid #2ecc71; padding-bottom: 10px; }
+        .control-group { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; }
+        .control-group h3 { margin: 0 0 8px 0; font-size: 0.9rem; color: #bdc3c7; text-transform: uppercase; }
+        .input-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .input-row label { font-size: 0.85rem; color: #ecf0f1; }
+        input[type="number"], select { width: 70px; padding: 6px; border-radius: 3px; border: none; background: #ecf0f1; }
+        input[type="range"] { width: 100%; height: 20px; }
+        input[type="color"] { border: none; width: 100%; height: 35px; padding: 0; background: none; }
 
-        input[type="number"], select {
-            width: 70px;
-            padding: 6px; /* Touch target maior */
-            border-radius: 3px;
-            border: none;
-            background: #ecf0f1;
-        }
-
-        input[type="range"] { width: 100%; height: 20px; } /* Slider mais fácil de pegar */
-        
-        input[type="color"] {
-            border: none;
-            width: 100%;
-            height: 35px; /* Cor mais fácil de clicar */
-            padding: 0;
-            background: none;
-        }
-
+        /* Botões */
         button {
-            width: 100%;
-            padding: 12px; /* Botões maiores para dedo */
-            background-color: #27ae60;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-weight: bold;
-            margin-top: 5px;
-            font-size: 0.9rem;
+            width: 100%; padding: 12px; background-color: #27ae60; color: white;
+            border: none; border-radius: 4px; font-weight: bold; margin-top: 5px; font-size: 0.9rem;
         }
         button:active { filter: brightness(0.9); transform: scale(0.98); }
-        
-        .file-btn { background-color: #8e44ad; }
+        .file-btn { background-color: #8e44ad; flex: 1; }
+        .bg-btn { background-color: #d35400; flex: 1; font-size: 0.8rem;} /* Botão laranja para fundo */
         .save-img-btn { background-color: #2980b9; }
         .reset-btn { background-color: #c0392b; }
-
-        .tools-row { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
         
-        .tool-btn {
-            background-color: #7f8c8d;
-            flex: 1;
-            padding: 15px 5px; /* Botões de ferramenta bem grandes */
-        }
-
-        .tool-btn.active {
-            background-color: #3498db;
-            border: 2px solid #2980b9;
-        }
-
+        /* Ferramentas */
+        .tools-row { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
+        .tool-btn { background-color: #7f8c8d; flex: 1; padding: 15px 5px; }
+        .tool-btn.active { background-color: #3498db; border: 2px solid #2980b9; }
         .action-buttons { display: flex; gap: 5px; margin-top: 5px; }
         .action-buttons button { background-color: #f39c12; }
         .action-buttons button:disabled { background-color: #7f8c8d; opacity: 0.6; }
 
-        /* --- VIEWPORT --- */
+        /* --- VIEWPORT E CAMADAS --- */
         .viewport {
-            flex-grow: 1;
-            background-color: #95a5a6;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden; /* Scroll manual via JS (Pan Tool) */
-            position: relative;
-            touch-action: none; /* Importante: Bloqueia zoom/scroll nativo do browser na área de desenho */
+            flex-grow: 1; background-color: #95a5a6; display: flex;
+            justify-content: center; align-items: center; overflow: hidden;
+            position: relative; touch-action: none;
         }
-
-        #map-container {
-            position: relative;
-            background-color: white;
-            box-shadow: 0 0 30px rgba(0,0,0,0.5);
-            flex-shrink: 0;
-            /* A transformação será usada para o scroll/pan */
-            transform-origin: 0 0; 
-        }
+        #content-wrapper { position: absolute; top: 0; left: 0; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+        #map-container { position: relative; background-color: white; flex-shrink: 0; }
 
         canvas { position: absolute; top: 0; left: 0; }
-        #gridLayer { z-index: 1; pointer-events: none; }
-        #drawLayer { z-index: 2; }
+        
+        /* Ordem das Camadas */
+        #bgLayer { z-index: 0; pointer-events: none; }   /* Fundo (atrás de tudo) */
+        #gridLayer { z-index: 1; pointer-events: none; } /* Grade (meio) */
+        #drawLayer { z-index: 2; }                       /* Desenho (frente, recebe cliques) */
 
     </style>
 </head>
@@ -159,21 +73,26 @@
         <h2>🗺️ RPG Map Maker</h2>
         
         <div class="control-group">
-            <h3>Arquivo</h3>
-            <div style="display: flex; gap: 5px;">
+            <h3>Arquivo & Fundo</h3>
+            <div style="display: flex; gap: 5px; margin-bottom: 5px;">
                 <button class="file-btn" onclick="saveProjectFile()">💾 Salvar</button>
                 <button class="file-btn" onclick="document.getElementById('fileInput').click()">📂 Abrir</button>
                 <input type="file" id="fileInput" accept=".json" style="display: none;" onchange="loadProjectFile(this)">
             </div>
-            <button class="save-img-btn" onclick="exportImage()">📷 Baixar Imagem</button>
+            <div style="display: flex; gap: 5px;">
+                <button class="bg-btn" onclick="document.getElementById('bgInput').click()">🖼️ Pôr Fundo</button>
+                <button class="bg-btn" onclick="clearBackground()" style="background-color: #c0392b;">❌ Tirar</button>
+                 <input type="file" id="bgInput" accept="image/*" style="display: none;" onchange="loadBackground(this)">
+            </div>
+             <button class="save-img-btn" onclick="exportImage()" style="margin-top: 10px;">📷 Baixar Imagem Final</button>
         </div>
 
         <div class="control-group">
-            <h3>Configurar</h3>
+            <h3>Configurar Mapa</h3>
             <div class="input-row"><label>Largura</label><input type="number" id="mapCols" value="20" min="5" max="100"></div>
             <div class="input-row"><label>Altura</label><input type="number" id="mapRows" value="15" min="5" max="100"></div>
             <div class="input-row"><label>Célula</label><input type="number" id="cellSize" value="40" min="10" max="100"></div>
-            <button class="reset-btn" onclick="resizeMap(true)">Novo Mapa</button>
+            <button class="reset-btn" onclick="resizeMap(true)">Novo Mapa (Limpar)</button>
         </div>
 
         <div class="control-group">
@@ -213,8 +132,9 @@
     </aside>
 
     <main class="viewport" id="mainViewport">
-        <div id="content-wrapper" style="position: absolute; top: 0; left: 0;">
+        <div id="content-wrapper">
             <div id="map-container">
+                <canvas id="bgLayer"></canvas>
                 <canvas id="gridLayer"></canvas>
                 <canvas id="drawLayer"></canvas>
             </div>
@@ -222,274 +142,200 @@
     </main>
 
     <script>
-        // --- CONFIGURAÇÃO ---
-        const LOCAL_STORAGE_KEY = 'rpgMapData_touch_v1';
+        // --- CONFIGURAÇÃO E REFERÊNCIAS ---
+        const LOCAL_STORAGE_KEY = 'rpgMapData_v2_bg';
         const viewport = document.getElementById('mainViewport');
-        const contentWrapper = document.getElementById('content-wrapper'); // Novo wrapper para Pan suave
+        const contentWrapper = document.getElementById('content-wrapper');
         const container = document.getElementById('map-container');
+        
+        // Referências aos 3 Canvas
+        const bgCanvas = document.getElementById('bgLayer');
         const gridCanvas = document.getElementById('gridLayer');
         const drawCanvas = document.getElementById('drawLayer');
+        
+        const bgCtx = bgCanvas.getContext('2d');
         const gridCtx = gridCanvas.getContext('2d');
         const drawCtx = drawCanvas.getContext('2d');
         
         const inputs = {
-            cols: document.getElementById('mapCols'),
-            rows: document.getElementById('mapRows'),
-            cellSize: document.getElementById('cellSize'),
-            gridColor: document.getElementById('gridColor'),
-            gridWidth: document.getElementById('gridWidth'),
-            gridPattern: document.getElementById('gridPattern'),
-            brushColor: document.getElementById('brushColor'),
-            brushSize: document.getElementById('brushSize')
+            cols: document.getElementById('mapCols'), rows: document.getElementById('mapRows'), cellSize: document.getElementById('cellSize'),
+            gridColor: document.getElementById('gridColor'), gridWidth: document.getElementById('gridWidth'), gridPattern: document.getElementById('gridPattern'),
+            brushColor: document.getElementById('brushColor'), brushSize: document.getElementById('brushSize')
         };
-
         const btns = {
-            pan: document.getElementById('btnPan'),
-            brush: document.getElementById('btnBrush'),
-            eraser: document.getElementById('btnEraser'),
-            undo: document.getElementById('btnUndo'),
-            redo: document.getElementById('btnRedo')
+            pan: document.getElementById('btnPan'), brush: document.getElementById('btnBrush'), eraser: document.getElementById('btnEraser'),
+            undo: document.getElementById('btnUndo'), redo: document.getElementById('btnRedo')
         };
 
-        // --- ESTADO ---
+        // --- ESTADO DO APLICATIVO ---
         let state = {
-            isActionActive: false,
-            tool: 'pan',
-            lastX: 0, lastY: 0,       // Para desenho
-            
-            // Para Pan (Movimento)
-            panStartX: 0, panStartY: 0, 
-            offsetX: 50, offsetY: 50  // Posição inicial do mapa na tela
+            isActionActive: false, tool: 'pan',
+            lastX: 0, lastY: 0,
+            panStartX: 0, panStartY: 0, offsetX: 50, offsetY: 50,
+            bgImageSrc: null // Armazena a imagem de fundo atual (Base64)
         };
 
-        let history = [];
-        let historyStep = -1;
+        let history = []; let historyStep = -1;
 
         // --- INICIALIZAÇÃO ---
         window.onload = () => {
-            if (!loadFromLocalStorage()) {
-                resizeMap(true);
-            } else {
-                updateViewTransform(); // Aplica posição se carregou
-            }
+            if (!loadFromLocalStorage()) { resizeMap(true); } else { updateViewTransform(); }
             setTool('pan');
         };
 
-        // --- CORE: LÓGICA DE INPUT UNIFICADA (TOUCH + MOUSE) ---
-        
-        // 1. Função para pegar coordenadas X/Y independentemente se é Dedo ou Mouse
+        // --- LÓGICA DE INPUT (TOUCH/MOUSE) ---
         function getPointerPos(e) {
-            // Se for evento de toque
-            if(e.touches && e.touches.length > 0) {
-                const rect = drawCanvas.getBoundingClientRect();
-                return {
-                    x: e.touches[0].clientX - rect.left,
-                    y: e.touches[0].clientY - rect.top,
-                    rawX: e.touches[0].clientX,
-                    rawY: e.touches[0].clientY
-                };
-            }
-            // Se for mouse
-            else {
-                const rect = drawCanvas.getBoundingClientRect();
-                return {
-                    x: e.clientX - rect.left,
-                    y: e.clientY - rect.top,
-                    rawX: e.clientX,
-                    rawY: e.clientY
-                };
-            }
+            const rect = drawCanvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top, rawX: clientX, rawY: clientY };
         }
-
-        // 2. Início da Ação (MouseDown / TouchStart)
         function handleStart(e) {
-            // Impede scroll da página e comportamentos nativos
             if (e.cancelable) e.preventDefault();
-            
-            state.isActionActive = true;
-            const pos = getPointerPos(e);
-
+            state.isActionActive = true; const pos = getPointerPos(e);
             if (state.tool === 'pan') {
-                state.panStartX = pos.rawX - state.offsetX;
-                state.panStartY = pos.rawY - state.offsetY;
-                viewport.style.cursor = 'grabbing';
+                state.panStartX = pos.rawX - state.offsetX; state.panStartY = pos.rawY - state.offsetY; viewport.style.cursor = 'grabbing';
             } else {
-                // Ferramenta de desenho
-                state.lastX = pos.x;
-                state.lastY = pos.y;
-                performDraw(pos.x, pos.y); // Desenha ponto inicial
+                state.lastX = pos.x; state.lastY = pos.y; performDraw(pos.x, pos.y);
             }
         }
-
-        // 3. Movimento (MouseMove / TouchMove)
         function handleMove(e) {
-            if (!state.isActionActive) return;
-            if (e.cancelable) e.preventDefault();
-
-            const pos = getPointerPos(e);
-
-            if (state.tool === 'pan') {
-                // Atualiza offset do mapa
-                state.offsetX = pos.rawX - state.panStartX;
-                state.offsetY = pos.rawY - state.panStartY;
-                updateViewTransform();
-            } else {
-                // Desenha linha
-                performDraw(pos.x, pos.y);
-            }
+            if (!state.isActionActive) return; if (e.cancelable) e.preventDefault(); const pos = getPointerPos(e);
+            if (state.tool === 'pan') { state.offsetX = pos.rawX - state.panStartX; state.offsetY = pos.rawY - state.panStartY; updateViewTransform(); } 
+            else { performDraw(pos.x, pos.y); }
         }
-
-        // 4. Fim da Ação (MouseUp / TouchEnd)
         function handleEnd(e) {
             if (state.isActionActive) {
                 state.isActionActive = false;
-                
-                if (state.tool === 'pan') {
-                    viewport.style.cursor = 'grab';
-                } else {
-                    // Se estava desenhando, salva histórico e storage
-                    saveHistoryState();
-                    autoSave(); 
-                }
+                if (state.tool === 'pan') { viewport.style.cursor = 'grab'; } 
+                else { saveHistoryState(); autoSave(); }
             }
         }
+        viewport.addEventListener('mousedown', handleStart); viewport.addEventListener('touchstart', handleStart, { passive: false });
+        window.addEventListener('mousemove', handleMove); window.addEventListener('touchmove', handleMove, { passive: false });
+        window.addEventListener('mouseup', handleEnd); window.addEventListener('touchend', handleEnd);
 
-        // Adiciona Listeners para Mouse E Touch na área do Viewport
-        // Usamos { passive: false } para garantir que preventDefault funcione no mobile
-        viewport.addEventListener('mousedown', handleStart);
-        viewport.addEventListener('touchstart', handleStart, { passive: false });
-
-        window.addEventListener('mousemove', handleMove);
-        window.addEventListener('touchmove', handleMove, { passive: false });
-
-        window.addEventListener('mouseup', handleEnd);
-        window.addEventListener('touchend', handleEnd);
-
-        // --- DESENHO E PAN ---
-
-        function updateViewTransform() {
-            // Move a div que contém os canvas
-            contentWrapper.style.transform = `translate(${state.offsetX}px, ${state.offsetY}px)`;
-        }
-
+        function updateViewTransform() { contentWrapper.style.transform = `translate(${state.offsetX}px, ${state.offsetY}px)`; }
         function performDraw(currX, currY) {
-            drawCtx.beginPath();
-            drawCtx.moveTo(state.lastX, state.lastY);
-            drawCtx.lineTo(currX, currY);
-            
-            drawCtx.lineWidth = inputs.brushSize.value;
-            drawCtx.lineCap = 'round';
-            drawCtx.lineJoin = 'round';
-
-            if (state.tool === 'brush') {
-                drawCtx.globalCompositeOperation = 'source-over';
-                drawCtx.strokeStyle = inputs.brushColor.value;
-            } else {
-                drawCtx.globalCompositeOperation = 'destination-out';
-                drawCtx.strokeStyle = "rgba(0,0,0,1)";
-            }
-            
-            drawCtx.stroke();
-            [state.lastX, state.lastY] = [currX, currY];
+            drawCtx.beginPath(); drawCtx.moveTo(state.lastX, state.lastY); drawCtx.lineTo(currX, currY);
+            drawCtx.lineWidth = inputs.brushSize.value; drawCtx.lineCap = 'round'; drawCtx.lineJoin = 'round';
+            if (state.tool === 'brush') { drawCtx.globalCompositeOperation = 'source-over'; drawCtx.strokeStyle = inputs.brushColor.value; } 
+            else { drawCtx.globalCompositeOperation = 'destination-out'; drawCtx.strokeStyle = "rgba(0,0,0,1)"; }
+            drawCtx.stroke(); [state.lastX, state.lastY] = [currX, currY];
         }
 
-        // --- ARQUIVOS E PERSISTÊNCIA (Mesmo código anterior) ---
-        function autoSave() {
-            const data = {
+        // --- ARQUIVOS E PERSISTÊNCIA ---
+        // Função auxiliar para coletar dados atuais
+        function getCurrentMapData() {
+            return {
                 cols: inputs.cols.value, rows: inputs.rows.value, cellSize: inputs.cellSize.value,
                 gridColor: inputs.gridColor.value, gridWidth: inputs.gridWidth.value, gridPattern: inputs.gridPattern.value,
-                image: drawCanvas.toDataURL()
+                image: drawCanvas.toDataURL(),
+                bgImage: state.bgImageSrc // Inclui o fundo no salvamento
             };
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+        }
+
+        function autoSave() { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(getCurrentMapData())); }
+        
+        function saveProjectFile() {
+            const data = getCurrentMapData();
+            const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
+            const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = "mapa-rpg-bg.json"; a.click(); URL.revokeObjectURL(url);
         }
 
         function loadFromLocalStorage() {
-            const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-            if (!saved) return false;
-            try {
-                const data = JSON.parse(saved);
-                applyMapData(data);
-                return true;
-            } catch (e) { return false; }
+            const saved = localStorage.getItem(LOCAL_STORAGE_KEY); if (!saved) return false;
+            try { applyMapData(JSON.parse(saved)); return true; } catch (e) { return false; }
         }
-
-        function saveProjectFile() {
-            const data = {
-                cols: inputs.cols.value, rows: inputs.rows.value, cellSize: inputs.cellSize.value,
-                gridColor: inputs.gridColor.value, gridWidth: inputs.gridWidth.value, gridPattern: inputs.gridPattern.value,
-                image: drawCanvas.toDataURL()
-            };
-            const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = "mapa-rpg.json"; a.click();
-            URL.revokeObjectURL(url);
-        }
-
         function loadProjectFile(input) {
-            const file = input.files[0];
-            if (!file) return;
+            const file = input.files[0]; if (!file) return;
             const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    applyMapData(data);
-                    autoSave();
-                } catch (err) { alert("Erro ao ler arquivo."); }
-            };
-            reader.readAsText(file);
-            input.value = '';
+            reader.onload = (e) => { try { applyMapData(JSON.parse(e.target.result)); autoSave(); } catch (err) { alert("Erro ao ler arquivo."); } };
+            reader.readAsText(file); input.value = '';
         }
 
         function applyMapData(data) {
             inputs.cols.value = data.cols; inputs.rows.value = data.rows; inputs.cellSize.value = data.cellSize;
-            inputs.gridColor.value = data.gridColor || '#cccccc'; inputs.gridWidth.value = data.gridWidth || 1;
-            inputs.gridPattern.value = data.gridPattern || 'solid';
-            resizeCanvasStruct();
+            inputs.gridColor.value = data.gridColor || '#cccccc'; inputs.gridWidth.value = data.gridWidth || 1; inputs.gridPattern.value = data.gridPattern || 'solid';
+            state.bgImageSrc = data.bgImage || null; // Carrega o fundo
+            resizeCanvasStruct(); 
             drawGrid();
+            drawBackground(); // Desenha o fundo carregado
             if (data.image) {
-                const img = new Image();
-                img.src = data.image;
+                const img = new Image(); img.src = data.image;
                 img.onload = () => {
-                    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-                    drawCtx.drawImage(img, 0, 0);
-                    history = [drawCanvas.toDataURL()];
-                    historyStep = 0;
-                    updateButtons();
+                    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height); drawCtx.drawImage(img, 0, 0);
+                    history = [drawCanvas.toDataURL()]; historyStep = 0; updateButtons();
                 };
             }
         }
 
+        // --- NOVA FUNCIONALIDADE: IMAGEM DE FUNDO ---
+        function loadBackground(input) {
+            const file = input.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                state.bgImageSrc = e.target.result; // Salva a imagem em memória
+                drawBackground(); // Desenha no canvas de fundo
+                autoSave();
+            };
+            reader.readAsDataURL(file);
+            input.value = '';
+        }
+
+        function drawBackground() {
+            bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+            if (!state.bgImageSrc) return;
+            const img = new Image();
+            img.src = state.bgImageSrc;
+            img.onload = () => {
+                // Desenha a imagem esticada para preencher todo o mapa
+                bgCtx.drawImage(img, 0, 0, bgCanvas.width, bgCanvas.height);
+            };
+        }
+
+        function clearBackground() {
+            state.bgImageSrc = null;
+            drawBackground();
+            autoSave();
+        }
+
+        // --- EXPORTAR IMAGEM FINAL ---
         function exportImage() {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = drawCanvas.width; tempCanvas.height = drawCanvas.height;
             const tCtx = tempCanvas.getContext('2d');
             tCtx.fillStyle = "#ffffff"; tCtx.fillRect(0,0, tempCanvas.width, tempCanvas.height);
-            tCtx.drawImage(gridCanvas, 0, 0); tCtx.drawImage(drawCanvas, 0, 0);
-            const link = document.createElement('a'); link.download = 'mapa-rpg.png'; link.href = tempCanvas.toDataURL(); link.click();
+            
+            // Ordem de desenho importante: Fundo -> Grade -> Desenho
+            if (state.bgImageSrc) tCtx.drawImage(bgCanvas, 0, 0);
+            tCtx.drawImage(gridCanvas, 0, 0); 
+            tCtx.drawImage(drawCanvas, 0, 0);
+            
+            const link = document.createElement('a'); link.download = 'mapa-rpg-completo.png'; link.href = tempCanvas.toDataURL(); link.click();
         }
 
         // --- MAPA UTILS ---
         function updateGrid() { drawGrid(); autoSave(); }
-        
         function resizeCanvasStruct() {
-            const w = parseInt(inputs.cols.value) * parseInt(inputs.cellSize.value);
-            const h = parseInt(inputs.rows.value) * parseInt(inputs.cellSize.value);
+            const w = parseInt(inputs.cols.value) * parseInt(inputs.cellSize.value); const h = parseInt(inputs.rows.value) * parseInt(inputs.cellSize.value);
             container.style.width = w + 'px'; container.style.height = h + 'px';
+            // Redimensiona todos os 3 canvas
+            bgCanvas.width = w; bgCanvas.height = h;
             gridCanvas.width = w; gridCanvas.height = h;
             drawCanvas.width = w; drawCanvas.height = h;
         }
-
         function resizeMap(clear = false) {
             if (clear && !confirm("Apagar desenho atual?")) return;
-            resizeCanvasStruct(); drawGrid();
+            resizeCanvasStruct(); 
+            drawGrid();
+            drawBackground(); // Redesenha o fundo para se ajustar ao novo tamanho
             if (clear) {
                 drawCtx.clearRect(0,0, drawCanvas.width, drawCanvas.height);
                 history = []; historyStep = -1; saveHistoryState(); autoSave();
-                // Reseta Pan para o centro
                 state.offsetX = 50; state.offsetY = 50; updateViewTransform();
             }
         }
-
         function drawGrid() {
             const w = gridCanvas.width; const h = gridCanvas.height; const s = parseInt(inputs.cellSize.value);
             gridCtx.clearRect(0, 0, w, h); gridCtx.beginPath();
@@ -503,34 +349,25 @@
 
         // --- FERRAMENTAS E UNDO ---
         function setTool(toolName) {
-            state.tool = toolName;
-            Object.values(btns).forEach(b => { if(b.classList) b.classList.remove('active'); });
+            state.tool = toolName; Object.values(btns).forEach(b => { if(b.classList) b.classList.remove('active'); });
             if (btns[toolName]) btns[toolName].classList.add('active');
         }
-
         function saveHistoryState() {
-            historyStep++;
-            if (historyStep < history.length) history.length = historyStep;
-            history.push(drawCanvas.toDataURL());
-            updateButtons();
+            historyStep++; if (historyStep < history.length) history.length = historyStep;
+            history.push(drawCanvas.toDataURL()); updateButtons();
         }
-
         function undo() { if (historyStep > 0) { historyStep--; restoreHistoryState(); } }
         function redo() { if (historyStep < history.length - 1) { historyStep++; restoreHistoryState(); } }
-
         function restoreHistoryState() {
             const img = new Image(); img.src = history[historyStep];
             img.onload = () => {
                 drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-                const prev = drawCtx.globalCompositeOperation;
-                drawCtx.globalCompositeOperation = 'source-over';
-                drawCtx.drawImage(img, 0, 0);
-                drawCtx.globalCompositeOperation = prev;
+                const prev = drawCtx.globalCompositeOperation; drawCtx.globalCompositeOperation = 'source-over';
+                drawCtx.drawImage(img, 0, 0); drawCtx.globalCompositeOperation = prev;
                 updateButtons(); autoSave();
             };
         }
         function updateButtons() { btns.undo.disabled = (historyStep <= 0); btns.redo.disabled = (historyStep >= history.length - 1); }
-
     </script>
 </body>
 </html>
