@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Projection Mapping Tool v2</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        
+        #canvas-container { position: relative; width: 100vw; height: 100vh; }
+        #glCanvas { position: absolute; top:0; left:0; z-index: 1; display: block; }
+        #uiCanvas { position: absolute; top:0; left:0; z-index: 2; display: block; pointer-events: none; }
+
+        /* Interface Flutuante */
+        #controls {
+            position: absolute; top: 10px; left: 10px; z-index: 10;
+            background: rgba(20, 20, 20, 0.9); color: #eee;
+            padding: 15px; border-radius: 8px; width: 260px;
+            border: 1px solid #444; box-shadow: 0 4px 15px rgba(0,0,0,0.7);
+            transition: opacity 0.3s;
+        }
+        
+        /* Classe para esconder a UI */
+        .ui-hidden { opacity: 0; pointer-events: none; }
+
+        h2 { margin-top: 0; font-size: 14px; text-transform: uppercase; color: #00d2ff; letter-spacing: 1px; }
+        h3 { font-size: 12px; margin: 10px 0 5px; color: #888; border-bottom: 1px solid #444; padding-bottom: 2px;}
+
+        button, input, select {
+            width: 100%; margin-bottom: 8px; padding: 6px; box-sizing: border-box;
+            background: #333; border: 1px solid #555; color: white;
+            border-radius: 4px; cursor: pointer; font-size: 12px;
+        }
+        button:hover { background: #444; border-color: #666; }
+        
+        /* Botões de camada lado a lado */
+        .btn-group { display: flex; gap: 5px; }
+        .btn-group button { margin-bottom: 0; }
+
+        label { font-size: 11px; color: #aaa; display: block; margin-bottom: 2px; }
+        #fileInput { display: none; }
+        .hint { font-size: 10px; color: #666; margin-top: 5px; font-style: italic; }
+
+        /* Botão destaque */
+        .btn-primary { background: #005f73; border-color: #0a9396; }
+        .btn-primary:hover { background: #0a9396; }
+        .btn-danger { background: #500; border-color: #700; }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container">
+        <canvas id="glCanvas"></canvas>
+        <canvas id="uiCanvas"></canvas>
+    </div>
+
+    <div id="controls">
+        <h2>Mapping Pro</h2>
+        
+        <h3>Geral</h3>
+        <div class="btn-group" style="margin-bottom: 8px;">
+            <div style="flex:1">
+                <label>Fundo:</label>
+                <input type="color" id="bgPicker" value="#000000" oninput="updateBgColor()" style="height:30px; padding:0;">
+            </div>
+            <div style="flex:2">
+                <label>&nbsp;</label>
+                <button onclick="toggleUI(false)">Ocultar UI (H)</button>
+            </div>
+        </div>
+        <button onclick="addSurface()" class="btn-primary">+ Nova Superfície</button>
+
+        <div id="edit-panel" style="display:none; margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
+            <h3 style="color: #00d2ff;">Propriedades</h3>
+            
+            <label>Ordem (Camadas):</label>
+            <div class="btn-group" style="margin-bottom: 10px;">
+                <button onclick="moveLayer(-1)" title="Mover para Trás">▼ Trás</button>
+                <button onclick="moveLayer(1)" title="Mover para Frente">▲ Frente</button>
+            </div>
+
+            <label>Tipo:</label>
+            <select id="contentType" onchange="updateSurfaceType()">
+                <option value="color">Cor Sólida</option>
+                <option value="image">Imagem</option>
+                <option value="video">Vídeo</option>
+            </select>
+
+            <div id="opt-color" class="opts">
+                <label>Cor do Elemento:</label>
+                <input type="color" id="surfColorPicker" oninput="updateSurfColor()" value="#00d2ff">
+            </div>
+
+            <div id="opt-media" class="opts" style="display:none;">
+                <button onclick="document.getElementById('fileInput').click()">📁 Carregar Arquivo</button>
+                <input type="text" id="urlInput" placeholder="Ou cole URL..." onchange="updateUrl(this.value)">
+                <input type="file" id="fileInput" accept="image/*,video/*" onchange="handleFileUpload(this)">
+            </div>
+            
+            <button onclick="deleteSurface()" class="btn-danger" style="margin-top:10px;">Remover</button>
+        </div>
+
+        <div id="no-selection" style="color:#666; font-size: 11px; text-align: center; padding: 20px 0;">
+            Selecione um objeto para editar.
+        </div>
+        
+        <p class="hint">Use o mouse para arrastar os cantos. Pressione 'H' ou 'ESC' para mostrar/esconder menu.</p>
+    </div>
+
+<script id="vertex-shader" type="x-shader/x-vertex">
+    attribute vec2 a_position;
+    attribute vec2 a_texCoord;
+    uniform mat4 u_matrix;
+    varying vec2 v_texCoord;
+    void main() {
+        vec4 position = u_matrix * vec4(a_position, 0.0, 1.0);
+        gl_Position = vec4(position.xy / position.w, 0.0, 1.0);
+        v_texCoord = a_texCoord;
+    }
+</script>
+
+<script id="fragment-shader" type="x-shader/x-fragment">
+    precision mediump float;
+    uniform sampler2D u_texture;
+    uniform vec4 u_color;
+    uniform bool u_useTexture;
+    varying vec2 v_texCoord;
+    void main() {
+        if (u_useTexture) {
+            gl_FragColor = texture2D(u_texture, v_texCoord);
+        } else {
+            gl_FragColor = u_color;
+        }
+    }
+</script>
+
+<script>
+    // --- Configuração Inicial ---
+    const glCanvas = document.getElementById('glCanvas');
+    const uiCanvas = document.getElementById('uiCanvas');
+    const gl = glCanvas.getContext('webgl', { alpha: false, preserveDrawingBuffer: true });
+    const ctx = uiCanvas.getContext('2d');
+    const container = document.getElementById('canvas-container');
+    const controlsDiv = document.getElementById('controls');
+
+    if (!gl) alert("WebGL não suportado.");
+
+    function resize() {
+        glCanvas.width = uiCanvas.width = window.innerWidth;
+        glCanvas.height = uiCanvas.height = window.innerHeight;
+        gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- Estado Global ---
+    let surfaces = [];
+    let selectedSurfaceIndex = -1;
+    let draggingPoint = null;
+    let bgColor = [0, 0, 0, 1]; // Preto padrão
+    let uiVisible = true;
+
+    // --- Classe Surface ---
+    class Surface {
+        constructor(x, y, w, h) {
+            this.points = [{x,y}, {x:x+w, y}, {x:x+w, y:y+h}, {x, y:y+h}];
+            this.type = 'color';
+            this.glolor = [0.0, 0.82, 1.0, 1.0]; 
+            this.hexColor = "#00d2ff";
+            this.mediaElement = null;
+            this.glTexture = null;
+            this.isTextureReady = false;
+        }
+    }
+
+    // --- WebGL Setup (Boilerplate) ---
+    function createShader(gl, type, src) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(s)); return null; }
+        return s;
+    }
+    const program = gl.createProgram();
+    gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, document.getElementById('vertex-shader').text));
+    gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, document.getElementById('fragment-shader').text));
+    gl.linkProgram(program);
+    gl.useProgram(program);
+
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0, 1,0, 0,1, 1,1]), gl.STATIC_DRAW);
+    
+    const texCoordBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0, 1,0, 0,1, 1,1]), gl.STATIC_DRAW);
+
+    const locs = {
+        pos: gl.getAttribLocation(program, "a_position"),
+        tex: gl.getAttribLocation(program, "a_texCoord"),
+        mat: gl.getUniformLocation(program, "u_matrix"),
+        uTex: gl.getUniformLocation(program, "u_texture"),
+        col: gl.getUniformLocation(program, "u_color"),
+        useT: gl.getUniformLocation(program, "u_useTexture")
+    };
+
+    const placeholderTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, placeholderTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255,255,255,255]));
+
+    // --- Matemática Homografia ---
+    function computeHomographyMatrix(points, width, height) {
+        const p = points.map(pt => ({ x: (pt.x/width)*2-1, y: 1-(pt.y/height)*2 }));
+        const s = [{x:0,y:0}, {x:1,y:0}, {x:1,y:1}, {x:0,y:1}];
+        const a = [], b = [];
+        for(let i=0; i<4; ++i) {
+            a.push([s[i].x, s[i].y, 1, 0, 0, 0, -s[i].x*p[i].x, -s[i].y*p[i].x]);
+            a.push([0, 0, 0, s[i].x, s[i].y, 1, -s[i].x*p[i].y, -s[i].y*p[i].y]);
+            b.push(p[i].x); b.push(p[i].y);
+        }
+        // Gaussian elimination simplificado
+        const n=8;
+        for (let i=0; i<n; ++i) {
+            let max=Math.abs(a[i][i]), row=i;
+            for(let k=i+1; k<n; ++k) if(Math.abs(a[k][i])>max){max=Math.abs(a[k][i]); row=k;}
+            for(let k=i; k<n; ++k) {const t=a[row][k]; a[row][k]=a[i][k]; a[i][k]=t;}
+            const t=b[row]; b[row]=b[i]; b[i]=t;
+            for(let k=i+1; k<n; ++k) {
+                const c=-a[k][i]/a[i][i];
+                for(let j=i; j<n; ++j) a[k][j]+=c*a[i][j];
+                b[k]+=c*b[i];
+            }
+        }
+        const x=new Array(n).fill(0);
+        for(let i=n-1; i>=0; --i) {
+            let sum=0; for(let j=i+1; j<n; ++j) sum+=a[i][j]*x[j];
+            x[i]=(b[i]-sum)/a[i][i];
+        }
+        return [x[0], x[3], 0, x[6], x[1], x[4], 0, x[7], 0, 0, 1, 0, x[2], x[5], 0, 1];
+    }
+
+    // --- Render Loop ---
+    function renderWebGL() {
+        // Aplica a cor de fundo global
+        gl.clearColor(bgColor[0], bgColor[1], bgColor[2], bgColor[3]);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.vertexAttribPointer(locs.pos, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(locs.pos);
+        gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+        gl.vertexAttribPointer(locs.tex, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(locs.tex);
+
+        surfaces.forEach(surf => {
+            const m = computeHomographyMatrix(surf.points, glCanvas.width, glCanvas.height);
+            gl.uniformMatrix4fv(locs.mat, false, m);
+
+            if (surf.type === 'color') {
+                gl.uniform1i(locs.useT, 0);
+                gl.uniform4fv(locs.col, surf.glolor);
+            } else {
+                gl.uniform1i(locs.useT, 1);
+                gl.activeTexture(gl.TEXTURE0);
+                if (surf.type === 'video' && surf.mediaElement && surf.isTextureReady) {
+                     gl.bindTexture(gl.TEXTURE_2D, surf.glTexture);
+                     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, surf.mediaElement);
+                } else if (surf.glTexture && surf.isTextureReady) {
+                     gl.bindTexture(gl.TEXTURE_2D, surf.glTexture);
+                } else {
+                     gl.bindTexture(gl.TEXTURE_2D, placeholderTex);
+                }
+                gl.uniform1i(locs.uTex, 0);
+            }
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        });
+    }
+
+    function renderUI() {
+        ctx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
+        
+        // Se a UI estiver oculta, não desenha nada
+        if (!uiVisible) return;
+
+        surfaces.forEach((surf, index) => {
+            const isSelected = index === selectedSurfaceIndex;
+            
+            ctx.beginPath();
+            ctx.moveTo(surf.points[0].x, surf.points[0].y);
+            surf.points.forEach(p => ctx.lineTo(p.x, p.y));
+            ctx.closePath();
+
+            if (isSelected) {
+                ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#fff';
+                surf.points.forEach(p => {
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                    ctx.fill(); ctx.stroke();
+                });
+                
+                // Indicador de número da camada (útil para saber a ordem)
+                const center = {
+                    x: (surf.points[0].x + surf.points[2].x)/2,
+                    y: (surf.points[0].y + surf.points[2].y)/2
+                };
+                ctx.fillStyle = '#00d2ff';
+                ctx.font = '12px Arial';
+                ctx.fillText(`Layer ${index}`, center.x - 20, center.y);
+
+            } else {
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1; ctx.stroke();
+            }
+        });
+    }
+
+    function animate() {
+        renderWebGL();
+        renderUI();
+        requestAnimationFrame(animate);
+    }
+    animate();
+
+    // --- Novas Funcionalidades ---
+
+    // 1. Toggle UI
+    function toggleUI(show) {
+        if (show === undefined) uiVisible = !uiVisible;
+        else uiVisible = show;
+
+        if (uiVisible) {
+            controlsDiv.classList.remove('ui-hidden');
+            uiCanvas.style.pointerEvents = 'auto'; // Reativa cliques na UI
+        } else {
+            controlsDiv.classList.add('ui-hidden');
+            uiCanvas.style.pointerEvents = 'none'; // Cliques passam direto (segurança)
+            selectSurface(-1); // Deseleciona para limpar o desenho
+        }
+    }
+
+    // Atalho de teclado para UI
+    window.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'h' || e.key === 'Escape') {
+            toggleUI();
+        }
+    });
+
+    // 2. Cor de Fundo
+    function updateBgColor() {
+        const hex = document.getElementById('bgPicker').value;
+        bgColor = hexToRgbGL(hex);
+    }
+
+    // 3. Reordenar Camadas
+    function moveLayer(direction) {
+        if (selectedSurfaceIndex === -1) return;
+        
+        const currentIndex = selectedSurfaceIndex;
+        const newIndex = currentIndex + direction;
+
+        // Verifica limites do array
+        if (newIndex < 0 || newIndex >= surfaces.length) return;
+
+        // Troca os elementos no array
+        const temp = surfaces[currentIndex];
+        surfaces[currentIndex] = surfaces[newIndex];
+        surfaces[newIndex] = temp;
+
+        // Atualiza a seleção para acompanhar o objeto
+        selectSurface(newIndex);
+    }
+
+
+    // --- Interação (Mouse) ---
+    const dist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    function isInside(p, vs) {
+        let inside = false;
+        for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+            if (((vs[i].y > p.y) != (vs[j].y > p.y)) && (p.x < (vs[j].x - vs[i].x) * (p.y - vs[i].y) / (vs[j].y - vs[i].y) + vs[i].x)) inside = !inside;
+        }
+        return inside;
+    }
+
+    // Mouse events agora checam uiVisible para evitar edição acidental
+    container.addEventListener('mousedown', e => {
+        if (!uiVisible) return; 
+
+        const mouseP = {x: e.clientX, y: e.clientY};
+        let clickedCorner = false;
+
+        if (selectedSurfaceIndex !== -1) {
+            surfaces[selectedSurfaceIndex].points.forEach((p, idx) => {
+                if (dist(p, mouseP) < 15) {
+                    draggingPoint = { surfIdx: selectedSurfaceIndex, ptIdx: idx };
+                    clickedCorner = true;
+                }
+            });
+        }
+
+        if (!clickedCorner) {
+            let foundIdx = -1;
+            // Procura do topo (ultimo) para o fundo (primeiro)
+            for (let i = surfaces.length - 1; i >= 0; i--) {
+                if (isInside(mouseP, surfaces[i].points)) { foundIdx = i; break; }
+            }
+            selectSurface(foundIdx);
+        }
+    });
+
+    container.addEventListener('mousemove', e => {
+        if (!uiVisible) return;
+
+        if (draggingPoint) {
+            const p = surfaces[draggingPoint.surfIdx].points[draggingPoint.ptIdx];
+            p.x = e.clientX; p.y = e.clientY;
+        } else {
+             let hovering = false;
+             if(selectedSurfaceIndex !== -1) {
+                 surfaces[selectedSurfaceIndex].points.forEach(p => {
+                     if(dist(p, {x:e.clientX, y:e.clientY}) < 15) hovering = true;
+                 })
+             }
+             container.style.cursor = hovering ? 'move' : 'default';
+        }
+    });
+    window.addEventListener('mouseup', () => draggingPoint = null);
+
+
+    // --- Helpers UI ---
+    function addSurface() {
+        const w = 300, h = 200;
+        surfaces.push(new Surface((window.innerWidth-w)/2, (window.innerHeight-h)/2, w, h));
+        selectSurface(surfaces.length - 1);
+    }
+
+    function selectSurface(index) {
+        selectedSurfaceIndex = index;
+        const panel = document.getElementById('edit-panel');
+        const noSel = document.getElementById('no-selection');
+        
+        if (index === -1) { 
+            panel.style.display = 'none'; 
+            noSel.style.display = 'block'; 
+            return; 
+        }
+        
+        panel.style.display = 'block'; 
+        noSel.style.display = 'none';
+        
+        const surf = surfaces[index];
+        document.getElementById('contentType').value = surf.type;
+        document.getElementById('surfColorPicker').value = surf.hexColor;
+        updateUIForType(surf.type);
+    }
+
+    function deleteSurface() {
+        if (selectedSurfaceIndex === -1) return;
+        const surf = surfaces[selectedSurfaceIndex];
+        if(surf.glTexture) gl.deleteTexture(surf.glTexture);
+        surfaces.splice(selectedSurfaceIndex, 1);
+        selectSurface(-1);
+    }
+
+    function updateUIForType(type) {
+        document.getElementById('opt-color').style.display = type === 'color' ? 'block' : 'none';
+        document.getElementById('opt-media').style.display = (type === 'image' || type === 'video') ? 'block' : 'none';
+    }
+
+    function updateSurfaceType() {
+        if (selectedSurfaceIndex === -1) return;
+        const type = document.getElementById('contentType').value;
+        surfaces[selectedSurfaceIndex].type = type;
+        updateUIForType(type);
+    }
+
+    function hexToRgbGL(hex) {
+        const bigint = parseInt(hex.slice(1), 16);
+        return [( (bigint >> 16) & 255 )/255, ( (bigint >> 8) & 255 )/255, ( bigint & 255 )/255, 1.0];
+    }
+
+    function updateSurfColor() {
+        if (selectedSurfaceIndex === -1) return;
+        const hex = document.getElementById('surfColorPicker').value;
+        surfaces[selectedSurfaceIndex].hexColor = hex;
+        surfaces[selectedSurfaceIndex].glolor = hexToRgbGL(hex);
+    }
+
+    function handleFileUpload(input) {
+        if (selectedSurfaceIndex === -1 || !input.files[0]) return;
+        const file = input.files[0];
+        applyMedia(URL.createObjectURL(file), file.type.startsWith('video') ? 'video' : 'image');
+    }
+    function updateUrl(url) {
+        if (selectedSurfaceIndex === -1 || !url) return;
+        const isVideo = url.match(/\.(mp4|webm|ogg|mov)$/i);
+        applyMedia(url, isVideo ? 'video' : 'image');
+    }
+    function applyMedia(url, type) {
+        const surf = surfaces[selectedSurfaceIndex];
+        surf.type = type; surf.isTextureReady = false;
+        if(surf.glTexture) gl.deleteTexture(surf.glTexture);
+        surf.glTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, surf.glTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        
+        if (type === 'video') {
+            const vid = document.createElement('video');
+            vid.src = url; vid.loop = true; vid.muted = true; vid.autoplay = true;
+            vid.play().then(() => surf.isTextureReady = true).catch(e => console.warn(e));
+            surf.mediaElement = vid;
+        } else {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                gl.bindTexture(gl.TEXTURE_2D, surf.glTexture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+                surf.isTextureReady = true;
+            };
+            img.src = url;
+            surf.mediaElement = img;
+        }
+        document.getElementById('contentType').value = type;
+        updateUIForType(type);
+    }
+</script>
+</body>
+</html>
