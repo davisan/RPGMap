@@ -488,6 +488,7 @@
         });
     }
 
+	/*
     function toggleUI(show) {
         uiVisible = (show !== undefined) ? show : !uiVisible;
         if (uiVisible) {
@@ -499,6 +500,45 @@
             selectSurface(-1);
         }
     }
+	*/
+	function toggleUI(show) {
+        // Define o estado (se show for indefinido, inverte o atual)
+        const targetState = (show !== undefined) ? show : !uiVisible;
+
+        // Se o estado não mudou, não faz nada (evita loops)
+        if (targetState === uiVisible) return;
+
+        uiVisible = targetState;
+
+        if (uiVisible) {
+            // MOSTRAR INTERFACE
+            controlsDiv.classList.remove('ui-hidden');
+            uiCanvas.style.pointerEvents = 'auto';
+            
+            // Sai da tela cheia se estiver nela
+            if (document.fullscreenElement) {
+                document.exitFullscreen().catch(err => console.log("Erro ao sair tela cheia:", err));
+            }
+        } else {
+            // ESCONDER INTERFACE
+            controlsDiv.classList.add('ui-hidden');
+            uiCanvas.style.pointerEvents = 'none';
+            selectSurface(-1); // Deseleciona
+            
+            // Entra em tela cheia (apenas se não estiver)
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.warn("Tela cheia bloqueada (requer interação do usuário):", err);
+                });
+            }
+        }
+    }
+	document.addEventListener('fullscreenchange', () => {
+        // Se saiu da tela cheia (document.fullscreenElement é null), força a UI a aparecer
+        if (!document.fullscreenElement) {
+            toggleUI(true);
+        }
+    });
 	
 	function getPointerPos(e) {
         if (e.touches && e.touches.length > 0) {
