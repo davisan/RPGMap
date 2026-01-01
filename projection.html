@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGL Projection Mapping Tool v2</title>
+    <title>Web Projection Mapper - Persistence Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
         
@@ -11,40 +11,63 @@
         #glCanvas { position: absolute; top:0; left:0; z-index: 1; display: block; }
         #uiCanvas { position: absolute; top:0; left:0; z-index: 2; display: block; pointer-events: none; }
 
-        /* Interface Flutuante */
+        /* --- Interface --- */
         #controls {
             position: absolute; top: 10px; left: 10px; z-index: 10;
-            background: rgba(20, 20, 20, 0.9); color: #eee;
-            padding: 15px; border-radius: 8px; width: 260px;
-            border: 1px solid #444; box-shadow: 0 4px 15px rgba(0,0,0,0.7);
-            transition: opacity 0.3s;
+            background: rgba(15, 15, 15, 0.95); color: #eee;
+            padding: 15px; border-radius: 8px; width: 280px;
+            border: 1px solid #333; box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+            transition: opacity 0.3s, transform 0.3s;
+            max-height: 90vh; overflow-y: auto;
         }
-        
-        /* Classe para esconder a UI */
-        .ui-hidden { opacity: 0; pointer-events: none; }
+        .ui-hidden { opacity: 0; pointer-events: none; transform: translateX(-20px); }
 
-        h2 { margin-top: 0; font-size: 14px; text-transform: uppercase; color: #00d2ff; letter-spacing: 1px; }
-        h3 { font-size: 12px; margin: 10px 0 5px; color: #888; border-bottom: 1px solid #444; padding-bottom: 2px;}
+        h2 { margin: 0 0 10px 0; font-size: 14px; text-transform: uppercase; color: #00ffcc; letter-spacing: 1.5px; border-bottom: 1px solid #333; padding-bottom: 8px; }
+        h3 { font-size: 11px; margin: 12px 0 5px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;}
 
-        button, input, select {
-            width: 100%; margin-bottom: 8px; padding: 6px; box-sizing: border-box;
-            background: #333; border: 1px solid #555; color: white;
-            border-radius: 4px; cursor: pointer; font-size: 12px;
+        /* Botões e Inputs */
+        button, select, input[type="text"] {
+            width: 100%; margin-bottom: 6px; padding: 8px; box-sizing: border-box;
+            background: #2a2a2a; border: 1px solid #444; color: #ddd;
+            border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s;
         }
-        button:hover { background: #444; border-color: #666; }
-        
-        /* Botões de camada lado a lado */
-        .btn-group { display: flex; gap: 5px; }
+        button:hover { background: #3a3a3a; border-color: #666; color: #fff; }
+        button:active { transform: translateY(1px); }
+
+        .btn-group { display: flex; gap: 5px; margin-bottom: 5px; }
         .btn-group button { margin-bottom: 0; }
-
-        label { font-size: 11px; color: #aaa; display: block; margin-bottom: 2px; }
-        #fileInput { display: none; }
-        .hint { font-size: 10px; color: #666; margin-top: 5px; font-style: italic; }
-
-        /* Botão destaque */
+        
+        /* Estilos de Botão */
         .btn-primary { background: #005f73; border-color: #0a9396; }
         .btn-primary:hover { background: #0a9396; }
-        .btn-danger { background: #500; border-color: #700; }
+        .btn-danger { background: #602020; border-color: #803030; }
+        .btn-danger:hover { background: #803030; }
+        .btn-save { background: #204020; border-color: #306030; }
+        .btn-save:hover { background: #306030; }
+        
+        /* Controles de Playback */
+        .playback-controls {
+            display: flex; gap: 2px; background: #000; padding: 4px; border-radius: 4px; border: 1px solid #333; margin-bottom: 10px;
+        }
+        .playback-controls button {
+            background: transparent; border: none; font-size: 16px; margin: 0; padding: 5px 0;
+        }
+        .playback-controls button:hover { background: #222; color: #00ffcc; }
+
+        label { font-size: 11px; color: #aaa; display: block; margin-bottom: 3px; }
+        input[type="color"] { width: 100%; height: 30px; border: none; padding: 0; background: none; cursor: pointer; }
+        
+        /* Inputs de Arquivo Escondidos */
+        #fileInput, #jsonInput { display: none; }
+        
+        .hint { font-size: 10px; color: #555; margin-top: 8px; font-style: italic; text-align: center;}
+        
+        /* Toast Notification */
+        #toast {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: #333; color: #fff; padding: 10px 20px; borderRadius: 20px;
+            font-size: 12px; opacity: 0; transition: opacity 0.5s; pointer-events: none; z-index: 100;
+        }
     </style>
 </head>
 <body>
@@ -54,32 +77,46 @@
         <canvas id="uiCanvas"></canvas>
     </div>
 
+    <div id="toast">Projeto Salvo!</div>
+
     <div id="controls">
-        <h2>Mapping Pro</h2>
+        <h2>Mapping Pro <span style="font-size:9px; color:#666; float:right; margin-top:3px;">v3.0</span></h2>
         
-        <h3>Geral</h3>
-        <div class="btn-group" style="margin-bottom: 8px;">
+        <h3>Arquivo / Estado</h3>
+        <div class="btn-group">
+            <button onclick="exportToFile()" class="btn-save" title="Baixar JSON">💾 Salvar Arq.</button>
+            <button onclick="document.getElementById('jsonInput').click()" title="Carregar JSON">📂 Abrir Arq.</button>
+            <input type="file" id="jsonInput" accept=".json" onchange="importFromFile(this)">
+        </div>
+        <button onclick="clearAll()" class="btn-danger" style="padding: 4px;">Limpar Tudo</button>
+
+        <h3>Maestro (Sync)</h3>
+        <div class="playback-controls">
+            <button onclick="globalAction('play')" title="Play Todos">▶</button>
+            <button onclick="globalAction('pause')" title="Pause Todos">⏸</button>
+            <button onclick="globalAction('reset')" title="Reiniciar Todos">⏮</button>
+        </div>
+
+        <h3>Global</h3>
+        <div class="btn-group">
             <div style="flex:1">
-                <label>Fundo:</label>
-                <input type="color" id="bgPicker" value="#000000" oninput="updateBgColor()" style="height:30px; padding:0;">
+                <input type="color" id="bgPicker" value="#000000" oninput="updateBgColor()" title="Cor de Fundo">
             </div>
-            <div style="flex:2">
-                <label>&nbsp;</label>
+            <div style="flex:3">
                 <button onclick="toggleUI(false)">Ocultar UI (H)</button>
             </div>
         </div>
-        <button onclick="addSurface()" class="btn-primary">+ Nova Superfície</button>
+        <button onclick="addSurface()" class="btn-primary" style="font-weight:bold; margin-top:5px;">+ Adicionar Tela</button>
 
-        <div id="edit-panel" style="display:none; margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
-            <h3 style="color: #00d2ff;">Propriedades</h3>
+        <div id="edit-panel" style="display:none; margin-top: 15px; border-top: 1px solid #333; padding-top: 10px;">
+            <h3 style="color: #00ffcc;">Propriedades da Seleção</h3>
             
-            <label>Ordem (Camadas):</label>
-            <div class="btn-group" style="margin-bottom: 10px;">
-                <button onclick="moveLayer(-1)" title="Mover para Trás">▼ Trás</button>
-                <button onclick="moveLayer(1)" title="Mover para Frente">▲ Frente</button>
+            <div class="btn-group">
+                <button onclick="moveLayer(-1)">▼ Trás</button>
+                <button onclick="moveLayer(1)">▲ Frente</button>
             </div>
 
-            <label>Tipo:</label>
+            <label>Tipo de Conteúdo:</label>
             <select id="contentType" onchange="updateSurfaceType()">
                 <option value="color">Cor Sólida</option>
                 <option value="image">Imagem</option>
@@ -87,24 +124,25 @@
             </select>
 
             <div id="opt-color" class="opts">
-                <label>Cor do Elemento:</label>
-                <input type="color" id="surfColorPicker" oninput="updateSurfColor()" value="#00d2ff">
+                <label>Cor:</label>
+                <input type="color" id="surfColorPicker" oninput="updateSurfColor()" value="#00ffcc">
             </div>
 
             <div id="opt-media" class="opts" style="display:none;">
-                <button onclick="document.getElementById('fileInput').click()">📁 Carregar Arquivo</button>
-                <input type="text" id="urlInput" placeholder="Ou cole URL..." onchange="updateUrl(this.value)">
+                <button onclick="document.getElementById('fileInput').click()">📁 Carregar Mídia</button>
+                <input type="text" id="urlInput" placeholder="URL (Imagem/Video)..." onchange="updateUrl(this.value)">
                 <input type="file" id="fileInput" accept="image/*,video/*" onchange="handleFileUpload(this)">
+                <div id="media-warning" style="font-size: 9px; color: #d88; margin-top:4px; display:none;">
+                    * Arquivo local. Ao recarregar a página, você precisará selecionar o arquivo novamente.
+                </div>
             </div>
             
-            <button onclick="deleteSurface()" class="btn-danger" style="margin-top:10px;">Remover</button>
+            <button onclick="deleteSurface()" class="btn-danger" style="margin-top:10px;">Remover Tela</button>
         </div>
 
-        <div id="no-selection" style="color:#666; font-size: 11px; text-align: center; padding: 20px 0;">
-            Selecione um objeto para editar.
+        <div id="no-selection" style="color:#444; font-size: 11px; text-align: center; padding: 15px 0;">
+            [ Nenhuma tela selecionada ]
         </div>
-        
-        <p class="hint">Use o mouse para arrastar os cantos. Pressione 'H' ou 'ESC' para mostrar/esconder menu.</p>
     </div>
 
 <script id="vertex-shader" type="x-shader/x-vertex">
@@ -118,7 +156,6 @@
         v_texCoord = a_texCoord;
     }
 </script>
-
 <script id="fragment-shader" type="x-shader/x-fragment">
     precision mediump float;
     uniform sampler2D u_texture;
@@ -135,7 +172,7 @@
 </script>
 
 <script>
-    // --- Configuração Inicial ---
+    // --- Configuração Básica ---
     const glCanvas = document.getElementById('glCanvas');
     const uiCanvas = document.getElementById('uiCanvas');
     const gl = glCanvas.getContext('webgl', { alpha: false, preserveDrawingBuffer: true });
@@ -143,7 +180,7 @@
     const container = document.getElementById('canvas-container');
     const controlsDiv = document.getElementById('controls');
 
-    if (!gl) alert("WebGL não suportado.");
+    if (!gl) alert("Erro: WebGL não suportado.");
 
     function resize() {
         glCanvas.width = uiCanvas.width = window.innerWidth;
@@ -153,32 +190,37 @@
     window.addEventListener('resize', resize);
     resize();
 
-    // --- Estado Global ---
+    // --- Estado da Aplicação ---
     let surfaces = [];
     let selectedSurfaceIndex = -1;
     let draggingPoint = null;
-    let bgColor = [0, 0, 0, 1]; // Preto padrão
+    let bgColor = [0, 0, 0, 1];
     let uiVisible = true;
+    let autoSaveTimeout = null;
 
     // --- Classe Surface ---
     class Surface {
         constructor(x, y, w, h) {
             this.points = [{x,y}, {x:x+w, y}, {x:x+w, y:y+h}, {x, y:y+h}];
             this.type = 'color';
-            this.glolor = [0.0, 0.82, 1.0, 1.0]; 
-            this.hexColor = "#00d2ff";
+            this.glolor = [0.0, 1.0, 0.8, 1.0];
+            this.hexColor = "#00ffcc";
             this.mediaElement = null;
             this.glTexture = null;
             this.isTextureReady = false;
+            
+            // Persistência
+            this.sourceUrl = null; // Guarda URL remota
+            this.isLocalFile = false; // Flag para saber se era arquivo local
         }
     }
 
-    // --- WebGL Setup (Boilerplate) ---
+    // --- WebGL Setup ---
     function createShader(gl, type, src) {
         const s = gl.createShader(type);
         gl.shaderSource(s, src);
         gl.compileShader(s);
-        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(s)); return null; }
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) return null;
         return s;
     }
     const program = gl.createProgram();
@@ -206,7 +248,8 @@
 
     const placeholderTex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, placeholderTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255,255,255,255]));
+    // Placeholder xadrez para indicar "Falta Mídia"
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([50,50,50,255]));
 
     // --- Matemática Homografia ---
     function computeHomographyMatrix(points, width, height) {
@@ -218,7 +261,6 @@
             a.push([0, 0, 0, s[i].x, s[i].y, 1, -s[i].x*p[i].y, -s[i].y*p[i].y]);
             b.push(p[i].x); b.push(p[i].y);
         }
-        // Gaussian elimination simplificado
         const n=8;
         for (let i=0; i<n; ++i) {
             let max=Math.abs(a[i][i]), row=i;
@@ -241,7 +283,6 @@
 
     // --- Render Loop ---
     function renderWebGL() {
-        // Aplica a cor de fundo global
         gl.clearColor(bgColor[0], bgColor[1], bgColor[2], bgColor[3]);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
@@ -262,9 +303,10 @@
             } else {
                 gl.uniform1i(locs.useT, 1);
                 gl.activeTexture(gl.TEXTURE0);
+                
                 if (surf.type === 'video' && surf.mediaElement && surf.isTextureReady) {
                      gl.bindTexture(gl.TEXTURE_2D, surf.glTexture);
-                     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, surf.mediaElement);
+                     try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, surf.mediaElement); } catch(e) {}
                 } else if (surf.glTexture && surf.isTextureReady) {
                      gl.bindTexture(gl.TEXTURE_2D, surf.glTexture);
                 } else {
@@ -278,37 +320,32 @@
 
     function renderUI() {
         ctx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
-        
-        // Se a UI estiver oculta, não desenha nada
         if (!uiVisible) return;
 
         surfaces.forEach((surf, index) => {
             const isSelected = index === selectedSurfaceIndex;
-            
             ctx.beginPath();
             ctx.moveTo(surf.points[0].x, surf.points[0].y);
             surf.points.forEach(p => ctx.lineTo(p.x, p.y));
             ctx.closePath();
 
             if (isSelected) {
-                ctx.strokeStyle = '#00d2ff'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 2; ctx.stroke();
                 ctx.fillStyle = '#fff';
                 surf.points.forEach(p => {
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
                     ctx.fill(); ctx.stroke();
                 });
+                // ID e Aviso de Mídia Perdida
+                const cx = (surf.points[0].x + surf.points[2].x)/2;
+                const cy = (surf.points[0].y + surf.points[2].y)/2;
+                ctx.fillStyle = "#00ffcc"; ctx.font="12px sans-serif"; ctx.fillText("#"+index, cx-5, cy);
                 
-                // Indicador de número da camada (útil para saber a ordem)
-                const center = {
-                    x: (surf.points[0].x + surf.points[2].x)/2,
-                    y: (surf.points[0].y + surf.points[2].y)/2
-                };
-                ctx.fillStyle = '#00d2ff';
-                ctx.font = '12px Arial';
-                ctx.fillText(`Layer ${index}`, center.x - 20, center.y);
-
+                if(surf.isLocalFile && !surf.isTextureReady) {
+                    ctx.fillStyle = "#ff4444"; ctx.fillText("Recarregar Arquivo!", cx-50, cy+20);
+                }
             } else {
-                ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1; ctx.stroke();
+                ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1; ctx.stroke();
             }
         });
     }
@@ -320,209 +357,347 @@
     }
     animate();
 
-    // --- Novas Funcionalidades ---
+    // --- Persistência (Salvar/Carregar) ---
 
-    // 1. Toggle UI
-    function toggleUI(show) {
-        if (show === undefined) uiVisible = !uiVisible;
-        else uiVisible = show;
+    // Estrutura do objeto para JSON/Storage
+    function getSceneData() {
+        return {
+            bg: document.getElementById('bgPicker').value,
+            surfaces: surfaces.map(s => ({
+                points: s.points,
+                type: s.type,
+                hexColor: s.hexColor,
+                sourceUrl: s.sourceUrl,
+                isLocalFile: s.isLocalFile
+            }))
+        };
+    }
 
-        if (uiVisible) {
-            controlsDiv.classList.remove('ui-hidden');
-            uiCanvas.style.pointerEvents = 'auto'; // Reativa cliques na UI
-        } else {
-            controlsDiv.classList.add('ui-hidden');
-            uiCanvas.style.pointerEvents = 'none'; // Cliques passam direto (segurança)
-            selectSurface(-1); // Deseleciona para limpar o desenho
+    function loadSceneData(data) {
+        if(!data) return;
+        
+        // 1. Restaurar Fundo
+        if(data.bg) {
+            document.getElementById('bgPicker').value = data.bg;
+            updateBgColor();
+        }
+
+        // 2. Restaurar Superfícies
+        if(data.surfaces) {
+            // Limpa texturas antigas
+            surfaces.forEach(s => { if(s.glTexture) gl.deleteTexture(s.glTexture); });
+            surfaces = [];
+
+            data.surfaces.forEach(sd => {
+                // Cria nova surface
+                // Pega o bounding box para criar (será sobrescrito pelos points)
+                const surf = new Surface(0,0,100,100);
+                surf.points = sd.points; // Restaura geometria exata
+                surf.type = sd.type;
+                surf.hexColor = sd.hexColor;
+                surf.glolor = hexToRgbGL(sd.hexColor);
+                surf.isLocalFile = sd.isLocalFile;
+                surf.sourceUrl = sd.sourceUrl;
+
+                // Tenta restaurar mídia
+                if (surf.type !== 'color') {
+                    if (surf.isLocalFile) {
+                        // Não faz nada, espera usuário carregar arquivo
+                        // A renderização mostrará placeholder
+                    } else if (surf.sourceUrl) {
+                        // URL remota, recarrega
+                        applyMediaToSurface(surf, surf.sourceUrl, surf.type);
+                    }
+                }
+                surfaces.push(surf);
+            });
+            selectSurface(-1);
         }
     }
 
-    // Atalho de teclado para UI
-    window.addEventListener('keydown', (e) => {
-        if (e.key.toLowerCase() === 'h' || e.key === 'Escape') {
-            toggleUI();
+    // Auto-Save no LocalStorage
+    function triggerAutoSave() {
+        clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = setTimeout(() => {
+            const data = getSceneData();
+            localStorage.setItem('mapper_autosave', JSON.stringify(data));
+        }, 500); // Salva 500ms após última alteração
+    }
+
+    // Carregar do Auto-Save ao Iniciar
+    window.addEventListener('load', () => {
+        const saved = localStorage.getItem('mapper_autosave');
+        if(saved) {
+            try {
+                loadSceneData(JSON.parse(saved));
+                showToast("Estado restaurado.");
+            } catch(e) { console.error("Erro ao carregar auto-save", e); }
         }
     });
 
-    // 2. Cor de Fundo
-    function updateBgColor() {
-        const hex = document.getElementById('bgPicker').value;
-        bgColor = hexToRgbGL(hex);
+    // Arquivo JSON - Exportar
+    function exportToFile() {
+        const data = getSceneData();
+        const jsonStr = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonStr], {type: "application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "projeto_mapping.json";
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("Arquivo salvo!");
     }
 
-    // 3. Reordenar Camadas
-    function moveLayer(direction) {
-        if (selectedSurfaceIndex === -1) return;
-        
-        const currentIndex = selectedSurfaceIndex;
-        const newIndex = currentIndex + direction;
-
-        // Verifica limites do array
-        if (newIndex < 0 || newIndex >= surfaces.length) return;
-
-        // Troca os elementos no array
-        const temp = surfaces[currentIndex];
-        surfaces[currentIndex] = surfaces[newIndex];
-        surfaces[newIndex] = temp;
-
-        // Atualiza a seleção para acompanhar o objeto
-        selectSurface(newIndex);
+    // Arquivo JSON - Importar
+    function importFromFile(input) {
+        const file = input.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                loadSceneData(data);
+                triggerAutoSave();
+                showToast("Projeto carregado!");
+            } catch(err) {
+                alert("Erro ao ler arquivo JSON.");
+            }
+        };
+        reader.readAsText(file);
+        input.value = ''; // Reset input
     }
-
-
-    // --- Interação (Mouse) ---
-    const dist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
-    function isInside(p, vs) {
-        let inside = false;
-        for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-            if (((vs[i].y > p.y) != (vs[j].y > p.y)) && (p.x < (vs[j].x - vs[i].x) * (p.y - vs[i].y) / (vs[j].y - vs[i].y) + vs[i].x)) inside = !inside;
+    
+    function clearAll() {
+        if(confirm("Tem certeza que deseja apagar tudo?")) {
+            surfaces = [];
+            selectSurface(-1);
+            triggerAutoSave();
         }
-        return inside;
     }
 
-    // Mouse events agora checam uiVisible para evitar edição acidental
+    // --- Lógica Geral e Eventos ---
+
+    function globalAction(action) {
+        surfaces.forEach(surf => {
+            if (surf.type === 'video' && surf.mediaElement) {
+                if(action === 'play') surf.mediaElement.play().catch(e=>{});
+                if(action === 'pause') surf.mediaElement.pause();
+                if(action === 'reset') { surf.mediaElement.currentTime = 0; surf.mediaElement.pause(); }
+            }
+        });
+    }
+
+    function toggleUI(show) {
+        uiVisible = (show !== undefined) ? show : !uiVisible;
+        if (uiVisible) {
+            controlsDiv.classList.remove('ui-hidden');
+            uiCanvas.style.pointerEvents = 'auto';
+        } else {
+            controlsDiv.classList.add('ui-hidden');
+            uiCanvas.style.pointerEvents = 'none';
+            selectSurface(-1);
+        }
+    }
+
+    // Mouse Interactions (Adicionado triggerAutoSave)
     container.addEventListener('mousedown', e => {
-        if (!uiVisible) return; 
-
-        const mouseP = {x: e.clientX, y: e.clientY};
+        if (!uiVisible) return;
+        const mp = {x: e.clientX, y: e.clientY};
         let clickedCorner = false;
-
         if (selectedSurfaceIndex !== -1) {
             surfaces[selectedSurfaceIndex].points.forEach((p, idx) => {
-                if (dist(p, mouseP) < 15) {
-                    draggingPoint = { surfIdx: selectedSurfaceIndex, ptIdx: idx };
-                    clickedCorner = true;
+                if (Math.hypot(p.x - mp.x, p.y - mp.y) < 15) { 
+                    draggingPoint = { surfIdx: selectedSurfaceIndex, ptIdx: idx }; 
+                    clickedCorner = true; 
                 }
             });
         }
-
         if (!clickedCorner) {
-            let foundIdx = -1;
-            // Procura do topo (ultimo) para o fundo (primeiro)
+            let found = -1;
             for (let i = surfaces.length - 1; i >= 0; i--) {
-                if (isInside(mouseP, surfaces[i].points)) { foundIdx = i; break; }
+                // Ray casting simples
+                const vs = surfaces[i].points;
+                let inside = false;
+                for (let j = 0, k = vs.length - 1; j < vs.length; k = j++) {
+                    if (((vs[j].y > mp.y) != (vs[k].y > mp.y)) && (mp.x < (vs[k].x - vs[j].x) * (mp.y - vs[j].y) / (vs[k].y - vs[j].y) + vs[j].x)) inside = !inside;
+                }
+                if(inside) { found = i; break; }
             }
-            selectSurface(foundIdx);
+            selectSurface(found);
         }
     });
 
     container.addEventListener('mousemove', e => {
         if (!uiVisible) return;
-
         if (draggingPoint) {
             const p = surfaces[draggingPoint.surfIdx].points[draggingPoint.ptIdx];
             p.x = e.clientX; p.y = e.clientY;
         } else {
-             let hovering = false;
-             if(selectedSurfaceIndex !== -1) {
-                 surfaces[selectedSurfaceIndex].points.forEach(p => {
-                     if(dist(p, {x:e.clientX, y:e.clientY}) < 15) hovering = true;
-                 })
-             }
-             container.style.cursor = hovering ? 'move' : 'default';
+            let hovering = false;
+            if(selectedSurfaceIndex > -1) {
+                surfaces[selectedSurfaceIndex].points.forEach(p=>{if(Math.hypot(p.x - e.clientX, p.y - e.clientY)<15) hovering=true;});
+            }
+            container.style.cursor = hovering ? 'move' : 'default';
         }
     });
-    window.addEventListener('mouseup', () => draggingPoint = null);
 
+    window.addEventListener('mouseup', () => {
+        if(draggingPoint) triggerAutoSave(); // Salva ao soltar o mouse
+        draggingPoint = null;
+    });
 
-    // --- Helpers UI ---
+    window.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'h' || e.key === 'Escape') toggleUI();
+        if (e.code === 'Space') {
+            const v = surfaces.find(s => s.type === 'video' && s.mediaElement);
+            if(v) (v.mediaElement.paused) ? globalAction('play') : globalAction('pause');
+        }
+    });
+
+    // Helpers UI e CRUD
     function addSurface() {
         const w = 300, h = 200;
         surfaces.push(new Surface((window.innerWidth-w)/2, (window.innerHeight-h)/2, w, h));
         selectSurface(surfaces.length - 1);
+        triggerAutoSave();
     }
-
-    function selectSurface(index) {
-        selectedSurfaceIndex = index;
+    
+    function selectSurface(i) {
+        selectedSurfaceIndex = i;
         const panel = document.getElementById('edit-panel');
         const noSel = document.getElementById('no-selection');
+        if (i === -1) { panel.style.display='none'; noSel.style.display='block'; return;}
+        panel.style.display='block'; noSel.style.display='none';
         
-        if (index === -1) { 
-            panel.style.display = 'none'; 
-            noSel.style.display = 'block'; 
-            return; 
-        }
+        const s = surfaces[i];
+        document.getElementById('contentType').value = s.type;
+        document.getElementById('surfColorPicker').value = s.hexColor;
+        document.getElementById('urlInput').value = (s.sourceUrl && !s.isLocalFile) ? s.sourceUrl : '';
         
-        panel.style.display = 'block'; 
-        noSel.style.display = 'none';
+        // Aviso de arquivo local
+        document.getElementById('media-warning').style.display = (s.type !== 'color' && s.isLocalFile) ? 'block' : 'none';
         
-        const surf = surfaces[index];
-        document.getElementById('contentType').value = surf.type;
-        document.getElementById('surfColorPicker').value = surf.hexColor;
-        updateUIForType(surf.type);
+        updateUIForType(s.type);
     }
 
     function deleteSurface() {
-        if (selectedSurfaceIndex === -1) return;
-        const surf = surfaces[selectedSurfaceIndex];
-        if(surf.glTexture) gl.deleteTexture(surf.glTexture);
-        surfaces.splice(selectedSurfaceIndex, 1);
+        if(selectedSurfaceIndex===-1)return;
+        const s = surfaces[selectedSurfaceIndex];
+        if(s.glTexture) gl.deleteTexture(s.glTexture);
+        surfaces.splice(selectedSurfaceIndex,1);
         selectSurface(-1);
+        triggerAutoSave();
     }
 
-    function updateUIForType(type) {
-        document.getElementById('opt-color').style.display = type === 'color' ? 'block' : 'none';
-        document.getElementById('opt-media').style.display = (type === 'image' || type === 'video') ? 'block' : 'none';
+    function moveLayer(dir) {
+        if(selectedSurfaceIndex===-1)return;
+        const nIdx = selectedSurfaceIndex + dir;
+        if(nIdx < 0 || nIdx >= surfaces.length) return;
+        [surfaces[selectedSurfaceIndex], surfaces[nIdx]] = [surfaces[nIdx], surfaces[selectedSurfaceIndex]];
+        selectSurface(nIdx);
+        triggerAutoSave();
     }
 
+    // Handlers de UI
+    function updateUIForType(t) {
+        document.getElementById('opt-color').style.display = t === 'color' ? 'block' : 'none';
+        document.getElementById('opt-media').style.display = (t === 'image' || t === 'video') ? 'block' : 'none';
+    }
+    
     function updateSurfaceType() {
-        if (selectedSurfaceIndex === -1) return;
-        const type = document.getElementById('contentType').value;
-        surfaces[selectedSurfaceIndex].type = type;
-        updateUIForType(type);
+        if(selectedSurfaceIndex===-1)return;
+        const t = document.getElementById('contentType').value;
+        surfaces[selectedSurfaceIndex].type = t;
+        updateUIForType(t);
+        selectSurface(selectedSurfaceIndex); // Atualiza avisos
+        triggerAutoSave();
     }
-
-    function hexToRgbGL(hex) {
-        const bigint = parseInt(hex.slice(1), 16);
-        return [( (bigint >> 16) & 255 )/255, ( (bigint >> 8) & 255 )/255, ( bigint & 255 )/255, 1.0];
+    
+    function updateBgColor() {
+        const h = document.getElementById('bgPicker').value;
+        bgColor = hexToRgbGL(h);
+        triggerAutoSave();
     }
-
+    
     function updateSurfColor() {
-        if (selectedSurfaceIndex === -1) return;
-        const hex = document.getElementById('surfColorPicker').value;
-        surfaces[selectedSurfaceIndex].hexColor = hex;
-        surfaces[selectedSurfaceIndex].glolor = hexToRgbGL(hex);
+        if(selectedSurfaceIndex===-1)return;
+        const h = document.getElementById('surfColorPicker').value;
+        surfaces[selectedSurfaceIndex].hexColor = h;
+        surfaces[selectedSurfaceIndex].glolor = hexToRgbGL(h);
+        triggerAutoSave();
     }
 
+    // Media Handling
     function handleFileUpload(input) {
-        if (selectedSurfaceIndex === -1 || !input.files[0]) return;
-        const file = input.files[0];
-        applyMedia(URL.createObjectURL(file), file.type.startsWith('video') ? 'video' : 'image');
+        if(selectedSurfaceIndex===-1 || !input.files[0]) return;
+        const f = input.files[0];
+        const u = URL.createObjectURL(f);
+        const t = f.type.startsWith('video') ? 'video' : 'image';
+        
+        const s = surfaces[selectedSurfaceIndex];
+        s.isLocalFile = true; // Marca como local
+        s.sourceUrl = null; // Não salvamos blob URL
+        
+        applyMediaToSurface(s, u, t);
+        selectSurface(selectedSurfaceIndex); // Atualiza UI (aviso)
+        triggerAutoSave();
     }
-    function updateUrl(url) {
-        if (selectedSurfaceIndex === -1 || !url) return;
-        const isVideo = url.match(/\.(mp4|webm|ogg|mov)$/i);
-        applyMedia(url, isVideo ? 'video' : 'image');
+
+    function updateUrl(u) {
+        if(selectedSurfaceIndex===-1) return;
+        if (!u) return;
+        
+        const s = surfaces[selectedSurfaceIndex];
+        const isV = u.match(/\.(mp4|webm|ogg|mov)$/i);
+        s.isLocalFile = false; // URL remota
+        s.sourceUrl = u;       // Salva URL
+        
+        applyMediaToSurface(s, u, isV ? 'video' : 'image');
+        triggerAutoSave();
     }
-    function applyMedia(url, type) {
-        const surf = surfaces[selectedSurfaceIndex];
-        surf.type = type; surf.isTextureReady = false;
-        if(surf.glTexture) gl.deleteTexture(surf.glTexture);
-        surf.glTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, surf.glTexture);
+
+    function applyMediaToSurface(s, url, type) {
+        s.type = type; 
+        s.isTextureReady = false;
+        if(s.glTexture) gl.deleteTexture(s.glTexture);
+        s.glTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, s.glTexture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         
         if (type === 'video') {
-            const vid = document.createElement('video');
-            vid.src = url; vid.loop = true; vid.muted = true; vid.autoplay = true;
-            vid.play().then(() => surf.isTextureReady = true).catch(e => console.warn(e));
-            surf.mediaElement = vid;
+            const v = document.createElement('video');
+            v.crossOrigin = "anonymous";
+            v.src = url; v.loop = true; v.muted = true; v.autoplay = false; v.playsInline = true;
+            v.addEventListener('canplay', () => { s.isTextureReady = true; });
+            s.mediaElement = v;
         } else {
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.onload = () => {
-                gl.bindTexture(gl.TEXTURE_2D, surf.glTexture);
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-                surf.isTextureReady = true;
+            const i = new Image();
+            i.crossOrigin = "anonymous";
+            i.onload = () => {
+                gl.bindTexture(gl.TEXTURE_2D, s.glTexture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, i);
+                s.isTextureReady = true;
             };
-            img.src = url;
-            surf.mediaElement = img;
+            i.src = url;
+            s.mediaElement = i;
         }
-        document.getElementById('contentType').value = type;
-        updateUIForType(type);
     }
+
+    // Utils
+    function hexToRgbGL(hex) {
+        const bi = parseInt(hex.slice(1), 16);
+        return [((bi>>16)&255)/255, ((bi>>8)&255)/255, (bi&255)/255, 1.0];
+    }
+    
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.innerText = msg; t.style.opacity = 1;
+        setTimeout(() => t.style.opacity = 0, 2000);
+    }
+
 </script>
 </body>
 </html>
