@@ -499,9 +499,82 @@
             selectSurface(-1);
         }
     }
+	
+	function getPointerPos(e) {
+        if (e.touches && e.touches.length > 0) {
+            return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }
+        return { x: e.clientX, y: e.clientY };
+    }
+
+    function handlePointerDown(e) {
+        if (!uiVisible) return;
+        
+        // Impede que a tela role ou dê zoom ao tocar no canvas
+        if (e.cancelable && e.touches) e.preventDefault();
+
+        const mp = getPointerPos(e);
+        let clickedCorner = false;
+
+        // 1. Tenta pegar um canto (Corner)
+        if (selectedSurfaceIndex !== -1) {
+            surfaces[selectedSurfaceIndex].points.forEach((p, idx) => {
+                // Aumentei um pouco a área de toque para 25px para facilitar no tablet
+                if (Math.hypot(p.x - mp.x, p.y - mp.y) < 25) { 
+                    draggingPoint = { surfIdx: selectedSurfaceIndex, ptIdx: idx }; 
+                    clickedCorner = true; 
+                }
+            });
+        }
+
+        // 2. Se não pegou canto, tenta selecionar a superfície
+        if (!clickedCorner) {
+            let found = -1;
+            for (let i = surfaces.length - 1; i >= 0; i--) {
+                const vs = surfaces[i].points;
+                let inside = false;
+                for (let j = 0, k = vs.length - 1; j < vs.length; k = j++) {
+                    if (((vs[j].y > mp.y) != (vs[k].y > mp.y)) && 
+                        (mp.x < (vs[k].x - vs[j].x) * (mp.y - vs[j].y) / (vs[k].y - vs[j].y) + vs[j].x)) {
+                        inside = !inside;
+                    }
+                }
+                if(inside) { found = i; break; }
+            }
+            selectSurface(found);
+        }
+    }
+
+    function handlePointerMove(e) {
+        if (!uiVisible) return;
+        if (e.touches) e.preventDefault(); // Bloqueia scroll no tablet
+
+        const mp = getPointerPos(e);
+
+        if (draggingPoint) {
+            const p = surfaces[draggingPoint.surfIdx].points[draggingPoint.ptIdx];
+            p.x = mp.x; 
+            p.y = mp.y;
+        } else {
+            // Lógica do cursor (apenas visual para mouse)
+            let hovering = false;
+            if(selectedSurfaceIndex > -1) {
+                surfaces[selectedSurfaceIndex].points.forEach(p=>{
+                    if(Math.hypot(p.x - mp.x, p.y - mp.y) < 25) hovering=true;
+                });
+            }
+            container.style.cursor = hovering ? 'move' : 'default';
+        }
+    }
+
+    function handlePointerUp(e) {
+        if (draggingPoint) triggerAutoSave();
+        draggingPoint = null;
+    }
 
     // Mouse Interactions (Adicionado triggerAutoSave)
-    container.addEventListener('mousedown', e => {
+	
+    /*container.addEventListener('mousedown', e => {
         if (!uiVisible) return;
         const mp = {x: e.clientX, y: e.clientY};
         let clickedCorner = false;
@@ -527,8 +600,9 @@
             selectSurface(found);
         }
     });
+	*/
 
-    container.addEventListener('mousemove', e => {
+    /*container.addEventListener('mousemove', e => {
         if (!uiVisible) return;
         if (draggingPoint) {
             const p = surfaces[draggingPoint.surfIdx].points[draggingPoint.ptIdx];
@@ -541,11 +615,21 @@
             container.style.cursor = hovering ? 'move' : 'default';
         }
     });
+	*/
 
-    window.addEventListener('mouseup', () => {
+    container.addEventListener('mousedown', handlePointerDown);
+	container.addEventListener('mousemove', handlePointerMove);
+	window.addEventListener('mouseup', handlePointerUp);
+	
+	/*window.addEventListener('mouseup', () => {
         if(draggingPoint) triggerAutoSave(); // Salva ao soltar o mouse
         draggingPoint = null;
     });
+	*/
+
+	container.addEventListener('touchstart', handlePointerDown, { passive: false });
+    container.addEventListener('touchmove', handlePointerMove, { passive: false });
+    window.addEventListener('touchend', handlePointerUp);
 
     window.addEventListener('keydown', (e) => {
         if (e.key.toLowerCase() === 'h' || e.key === 'Escape') toggleUI();
