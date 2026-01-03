@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Web Mapping Studio v6.0 (Separated Controls)</title>
+    <title>DV Projection Mapping 0.1</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; touch-action: none; }
         
@@ -11,7 +11,7 @@
         #glCanvas { position: absolute; top:0; left:0; z-index: 1; display: block; }
         #uiCanvas { position: absolute; top:0; left:0; z-index: 2; display: block; pointer-events: none; }
 
-        /* Interface */
+        /* Interface - Agora com posição inicial dinâmica via JS, mas padrão aqui */
         #controls {
             position: absolute; top: 10px; left: 10px; z-index: 100;
             background: rgba(18, 18, 18, 0.95); color: #e0e0e0;
@@ -21,9 +21,22 @@
             max-height: 90vh; overflow-y: auto;
             backdrop-filter: blur(5px);
         }
-        .ui-hidden { opacity: 0; pointer-events: none; transform: translateX(-20px); }
+        .ui-hidden { opacity: 0; pointer-events: none; }
 
-        h2 { margin: 0 0 10px 0; font-size: 15px; text-transform: uppercase; color: #00ffcc; letter-spacing: 1px; border-bottom: 1px solid #333; padding-bottom: 8px; }
+        /* HEADER ARRASTÁVEL */
+        #drag-handle {
+            margin: -15px -15px 10px -15px; /* Compensa o padding do pai */
+            padding: 15px 15px 8px 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid #333;
+            cursor: move; /* Cursor de movimento */
+            user-select: none;
+            border-radius: 8px 8px 0 0;
+        }
+        #drag-handle h2 { 
+            margin: 0; font-size: 15px; text-transform: uppercase; color: #00ffcc; letter-spacing: 1px; pointer-events: none;
+        }
+
         h3 { font-size: 11px; margin: 12px 0 5px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-weight: bold;}
         
         .btn-group { display: flex; gap: 5px; margin-bottom: 5px; }
@@ -70,7 +83,9 @@
     <div id="toast">Ação Realizada</div>
 
     <div id="controls">
-        <h2>Mapping Studio <span style="font-size:10px; color:#666; float:right; margin-top:3px;">v6.0</span></h2>
+        <div id="drag-handle">
+            <h2>DV Projection Mapping <span style="font-size:10px; color:#666; float:right; margin-top:3px;">v0.1</span></h2>
+        </div>
         
         <h3>Projeto</h3>
         <div class="btn-group">
@@ -136,29 +151,12 @@
     </div>
 
 <script id="vertex-shader" type="x-shader/x-vertex">
-    attribute vec2 a_position;
-    attribute vec2 a_texCoord;
-    uniform mat4 u_matrix;
-    varying vec2 v_texCoord;
-    void main() {
-        vec4 position = u_matrix * vec4(a_position, 0.0, 1.0);
-        gl_Position = vec4(position.xy / position.w, 0.0, 1.0);
-        v_texCoord = a_texCoord;
-    }
+    attribute vec2 a_position; attribute vec2 a_texCoord; uniform mat4 u_matrix; varying vec2 v_texCoord;
+    void main() { vec4 p=u_matrix*vec4(a_position,0.0,1.0); gl_Position=vec4(p.xy/p.w,0.0,1.0); v_texCoord=a_texCoord; }
 </script>
 <script id="fragment-shader" type="x-shader/x-fragment">
-    precision mediump float;
-    uniform sampler2D u_texture;
-    uniform vec4 u_color;
-    uniform bool u_useTexture;
-    varying vec2 v_texCoord;
-    void main() {
-        if (u_useTexture) {
-            gl_FragColor = texture2D(u_texture, v_texCoord);
-        } else {
-            gl_FragColor = u_color;
-        }
-    }
+    precision mediump float; uniform sampler2D u_texture; uniform vec4 u_color; uniform bool u_useTexture; varying vec2 v_texCoord;
+    void main() { if(u_useTexture) gl_FragColor=texture2D(u_texture,v_texCoord); else gl_FragColor=u_color; }
 </script>
 
 <script>
@@ -175,48 +173,97 @@
     let lastWidth = window.innerWidth;
     let lastHeight = window.innerHeight;
 
-    // --- 2. Resize Elástico ---
     function resize() {
-        const pixelRatio = window.devicePixelRatio || 1;
-        const newWidth = window.innerWidth;
-        const newHeight = window.innerHeight;
-
-        if (newWidth !== lastWidth || newHeight !== lastHeight) {
+        const pr = window.devicePixelRatio || 1;
+        const nw = window.innerWidth, nh = window.innerHeight;
+        if (nw !== lastWidth || nh !== lastHeight) {
             if (lastWidth > 0 && lastHeight > 0) {
-                const scaleX = newWidth / lastWidth;
-                const scaleY = newHeight / lastHeight;
-                surfaces.forEach(surf => {
-                    surf.points.forEach(p => { p.x *= scaleX; p.y *= scaleY; });
-                });
+                const sx = nw / lastWidth, sy = nh / lastHeight;
+                surfaces.forEach(s => s.points.forEach(p => { p.x *= sx; p.y *= sy; }));
             }
-            lastWidth = newWidth;
-            lastHeight = newHeight;
+            lastWidth = nw; lastHeight = nh;
         }
-
-        glCanvas.width  = newWidth * pixelRatio;
-        glCanvas.height = newHeight * pixelRatio;
-        uiCanvas.width  = newWidth * pixelRatio;
-        uiCanvas.height = newHeight * pixelRatio;
-
-        glCanvas.style.width = newWidth + "px";
-        glCanvas.style.height = newHeight + "px";
-        uiCanvas.style.width = newWidth + "px";
-        uiCanvas.style.height = newHeight + "px";
-
-        ctx.resetTransform();
-        ctx.scale(pixelRatio, pixelRatio);
+        glCanvas.width = nw * pr; glCanvas.height = nh * pr;
+        uiCanvas.width = nw * pr; uiCanvas.height = nh * pr;
+        glCanvas.style.width = nw + "px"; glCanvas.style.height = nh + "px";
+        uiCanvas.style.width = nw + "px"; uiCanvas.style.height = nh + "px";
+        ctx.resetTransform(); ctx.scale(pr, pr);
         gl.viewport(0, 0, glCanvas.width, glCanvas.height);
     }
-
     window.addEventListener('resize', resize);
-    // Listener específico para quando entra/sai de fullscreen
-    document.addEventListener('fullscreenchange', () => {
-        resize();
-        setTimeout(resize, 100);
-        setTimeout(resize, 300);
-    });
+    document.addEventListener('fullscreenchange', () => { resize(); setTimeout(resize, 100); setTimeout(resize, 300); });
 
-    // --- 3. Estado ---
+    // --- 2. Lógica de UI Arrastável (NOVO) ---
+    (function initDraggableMenu() {
+        const handle = document.getElementById('drag-handle');
+        const menu = document.getElementById('controls');
+        let isDraggingMenu = false;
+        let startX, startY, initialLeft, initialTop;
+
+        // Recupera posição salva
+        const savedPos = localStorage.getItem('mapping_menu_pos');
+        if (savedPos) {
+            const pos = JSON.parse(savedPos);
+            menu.style.left = pos.left;
+            menu.style.top = pos.top;
+        }
+
+        function startDrag(e) {
+            // Evita drag se clicar em botões dentro do header (se houver)
+            if (e.target.tagName === 'BUTTON') return;
+            
+            isDraggingMenu = true;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            startX = clientX;
+            startY = clientY;
+            
+            const rect = menu.getBoundingClientRect();
+            initialLeft = rect.left;
+            initialTop = rect.top;
+            
+            handle.style.cursor = 'grabbing';
+            if(e.type === 'touchstart') e.preventDefault();
+        }
+
+        function doDrag(e) {
+            if (!isDraggingMenu) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const dx = clientX - startX;
+            const dy = clientY - startY;
+            
+            menu.style.left = `${initialLeft + dx}px`;
+            menu.style.top = `${initialTop + dy}px`;
+            if(e.type === 'touchmove') e.preventDefault();
+        }
+
+        function stopDrag() {
+            if (isDraggingMenu) {
+                isDraggingMenu = false;
+                handle.style.cursor = 'move';
+                // Salva posição
+                localStorage.setItem('mapping_menu_pos', JSON.stringify({
+                    left: menu.style.left,
+                    top: menu.style.top
+                }));
+            }
+        }
+
+        handle.addEventListener('mousedown', startDrag);
+        window.addEventListener('mousemove', doDrag);
+        window.addEventListener('mouseup', stopDrag);
+        
+        // Touch support para menu
+        handle.addEventListener('touchstart', startDrag, {passive: false});
+        window.addEventListener('touchmove', doDrag, {passive: false});
+        window.addEventListener('touchend', stopDrag);
+    })();
+
+
+    // --- 3. Estado & Classes ---
     let surfaces = [];
     let selectedSurfaceIndex = -1;
     let draggingPoint = null;
@@ -238,478 +285,197 @@
         }
     }
 
-    // --- 4. WebGL Setup ---
+    // --- 4. WebGL Internals ---
     function createShader(gl, type, src) {
-        const s = gl.createShader(type);
-        gl.shaderSource(s, src);
-        gl.compileShader(s);
-        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) return null;
-        return s;
+        const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s;
     }
     const program = gl.createProgram();
     gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, document.getElementById('vertex-shader').text));
     gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, document.getElementById('fragment-shader').text));
-    gl.linkProgram(program);
-    gl.useProgram(program);
+    gl.linkProgram(program); gl.useProgram(program);
 
-    const positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    const posBuff = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, posBuff);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0, 1,0, 0,1, 1,1]), gl.STATIC_DRAW);
-    const texCoordBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+    const texBuff = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, texBuff);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0, 1,0, 0,1, 1,1]), gl.STATIC_DRAW);
 
     const locs = {
-        pos: gl.getAttribLocation(program, "a_position"),
-        tex: gl.getAttribLocation(program, "a_texCoord"),
-        mat: gl.getUniformLocation(program, "u_matrix"),
-        uTex: gl.getUniformLocation(program, "u_texture"),
-        col: gl.getUniformLocation(program, "u_color"),
-        useT: gl.getUniformLocation(program, "u_useTexture")
+        pos: gl.getAttribLocation(program, "a_position"), tex: gl.getAttribLocation(program, "a_texCoord"),
+        mat: gl.getUniformLocation(program, "u_matrix"), uTex: gl.getUniformLocation(program, "u_texture"),
+        col: gl.getUniformLocation(program, "u_color"), useT: gl.getUniformLocation(program, "u_useTexture")
     };
+    const phTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, phTex);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([50,50,50,255]));
 
-    const placeholderTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, placeholderTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([50,50,50,255]));
-
-    // --- 5. Matemática ---
-    function computeHomographyMatrix(points, width, height) {
-        const p = points.map(pt => ({ x: (pt.x/width)*2-1, y: 1-(pt.y/height)*2 }));
-        const s = [{x:0,y:0}, {x:1,y:0}, {x:1,y:1}, {x:0,y:1}];
-        const a = [], b = [];
+    function computeHomography(p, w, h) {
+        const pts = p.map(pt => ({ x: (pt.x/w)*2-1, y: 1-(pt.y/h)*2 }));
+        const src = [{x:0,y:0}, {x:1,y:0}, {x:1,y:1}, {x:0,y:1}];
+        const a=[], b=[];
         for(let i=0; i<4; ++i) {
-            a.push([s[i].x, s[i].y, 1, 0, 0, 0, -s[i].x*p[i].x, -s[i].y*p[i].x]);
-            a.push([0, 0, 0, s[i].x, s[i].y, 1, -s[i].x*p[i].y, -s[i].y*p[i].y]);
-            b.push(p[i].x); b.push(p[i].y);
+            a.push([src[i].x, src[i].y, 1, 0, 0, 0, -src[i].x*pts[i].x, -src[i].y*pts[i].x]);
+            a.push([0, 0, 0, src[i].x, src[i].y, 1, -src[i].x*pts[i].y, -src[i].y*pts[i].y]);
+            b.push(pts[i].x); b.push(pts[i].y);
         }
+        // Gauss elimination compacta
         const n=8;
-        for (let i=0; i<n; ++i) {
+        for(let i=0; i<n; ++i) {
             let max=Math.abs(a[i][i]), row=i;
             for(let k=i+1; k<n; ++k) if(Math.abs(a[k][i])>max){max=Math.abs(a[k][i]); row=k;}
             for(let k=i; k<n; ++k) {const t=a[row][k]; a[row][k]=a[i][k]; a[i][k]=t;}
             const t=b[row]; b[row]=b[i]; b[i]=t;
-            for(let k=i+1; k<n; ++k) {
-                const c=-a[k][i]/a[i][i];
-                for(let j=i; j<n; ++j) a[k][j]+=c*a[i][j];
-                b[k]+=c*b[i];
-            }
+            for(let k=i+1; k<n; ++k) { const c=-a[k][i]/a[i][i]; for(let j=i; j<n; ++j) a[k][j]+=c*a[i][j]; b[k]+=c*b[i]; }
         }
         const x=new Array(n).fill(0);
-        for(let i=n-1; i>=0; --i) {
-            let sum=0; for(let j=i+1; j<n; ++j) sum+=a[i][j]*x[j];
-            x[i]=(b[i]-sum)/a[i][i];
-        }
+        for(let i=n-1; i>=0; --i) { let sum=0; for(let j=i+1; j<n; ++j) sum+=a[i][j]*x[j]; x[i]=(b[i]-sum)/a[i][i]; }
         return [x[0], x[3], 0, x[6], x[1], x[4], 0, x[7], 0, 0, 1, 0, x[2], x[5], 0, 1];
     }
 
-    // --- 6. Render ---
-    function renderWebGL() {
-        gl.clearColor(bgColor[0], bgColor[1], bgColor[2], bgColor[3]);
-        gl.clear(gl.COLOR_BUFFER_BIT);
+    // --- 5. Render Loop ---
+    function render() {
+        gl.clearColor(bgColor[0], bgColor[1], bgColor[2], bgColor[3]); gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuff); gl.vertexAttribPointer(locs.pos, 2, gl.FLOAT, false, 0, 0); gl.enableVertexAttribArray(locs.pos);
+        gl.bindBuffer(gl.ARRAY_BUFFER, texBuff); gl.vertexAttribPointer(locs.tex, 2, gl.FLOAT, false, 0, 0); gl.enableVertexAttribArray(locs.tex);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-        gl.vertexAttribPointer(locs.pos, 2, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(locs.pos);
-        gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-        gl.vertexAttribPointer(locs.tex, 2, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(locs.tex);
-
-        surfaces.forEach(surf => {
-            const m = computeHomographyMatrix(surf.points, window.innerWidth, window.innerHeight);
+        surfaces.forEach(s => {
+            const m = computeHomography(s.points, window.innerWidth, window.innerHeight);
             gl.uniformMatrix4fv(locs.mat, false, m);
-
-            if (surf.type === 'color') {
-                gl.uniform1i(locs.useT, 0);
-                gl.uniform4fv(locs.col, surf.glolor);
+            if (s.type === 'color') {
+                gl.uniform1i(locs.useT, 0); gl.uniform4fv(locs.col, s.glolor);
             } else {
-                gl.uniform1i(locs.useT, 1);
-                gl.activeTexture(gl.TEXTURE0);
-                if (surf.type === 'video' && surf.mediaElement && surf.isTextureReady) {
-                     gl.bindTexture(gl.TEXTURE_2D, surf.glTexture);
-                     try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, surf.mediaElement); } catch(e) {}
-                } else if (surf.glTexture && surf.isTextureReady) {
-                     gl.bindTexture(gl.TEXTURE_2D, surf.glTexture);
-                } else {
-                     gl.bindTexture(gl.TEXTURE_2D, placeholderTex);
-                }
+                gl.uniform1i(locs.useT, 1); gl.activeTexture(gl.TEXTURE0);
+                if (s.type==='video' && s.mediaElement && s.isTextureReady) {
+                     gl.bindTexture(gl.TEXTURE_2D, s.glTexture);
+                     try { gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,s.mediaElement); } catch(e){}
+                } else if(s.glTexture && s.isTextureReady) gl.bindTexture(gl.TEXTURE_2D, s.glTexture);
+                else gl.bindTexture(gl.TEXTURE_2D, phTex);
                 gl.uniform1i(locs.uTex, 0);
             }
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         });
-    }
-
-    function renderUI() {
+        
         ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-        if (!uiVisible) return;
-
-        surfaces.forEach((surf, index) => {
-            const isSelected = index === selectedSurfaceIndex;
-            ctx.beginPath();
-            ctx.moveTo(surf.points[0].x, surf.points[0].y);
-            surf.points.forEach(p => ctx.lineTo(p.x, p.y));
-            ctx.closePath();
-
-            if (isSelected) {
-                ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 2; ctx.stroke();
-                ctx.fillStyle = '#fff';
-                surf.points.forEach(p => {
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-                    ctx.fill(); ctx.stroke();
-                });
-                const cx = (surf.points[0].x + surf.points[2].x)/2;
-                const cy = (surf.points[0].y + surf.points[2].y)/2;
-                ctx.fillStyle = "#00ffcc"; ctx.font="bold 14px sans-serif"; 
-                ctx.fillText("#"+index, cx-8, cy);
-
-                if(surf.isLocalFile && !surf.isTextureReady) {
-                    ctx.fillStyle = "#ff5555"; ctx.font="12px sans-serif";
-                    ctx.fillText("⚠️ Recarregar", cx-40, cy+20);
-                }
-            } else {
-                ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1; ctx.stroke();
-            }
-        });
+        if (uiVisible) {
+            surfaces.forEach((s, i) => {
+                const sel = i === selectedSurfaceIndex;
+                ctx.beginPath(); ctx.moveTo(s.points[0].x, s.points[0].y);
+                s.points.forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath();
+                if (sel) {
+                    ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = '#fff';
+                    s.points.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, 6.28); ctx.fill(); ctx.stroke(); });
+                    const cx = (s.points[0].x + s.points[2].x)/2, cy = (s.points[0].y + s.points[2].y)/2;
+                    ctx.fillStyle = "#00ffcc"; ctx.font="bold 14px sans-serif"; ctx.fillText("#"+i, cx-8, cy);
+                    if(s.isLocalFile && !s.isTextureReady) { ctx.fillStyle="#f55"; ctx.font="12px sans-serif"; ctx.fillText("⚠️ Recarregar", cx-40, cy+20); }
+                } else { ctx.strokeStyle='rgba(255,255,255,0.2)'; ctx.lineWidth=1; ctx.stroke(); }
+            });
+        }
+        requestAnimationFrame(render);
     }
+    resize(); render();
 
-    function animate() {
-        renderWebGL();
-        renderUI();
-        requestAnimationFrame(animate);
-    }
-    resize();
-    animate();
-
-    // --- 7. Interação ---
-    function getPointerPos(e) {
-        if (e.touches && e.touches.length > 0) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        return { x: e.clientX, y: e.clientY };
-    }
-
-    function handlePointerDown(e) {
+    // --- 6. Interação Canvas (Drag Pontos) ---
+    function getPtr(e) { return e.touches ? {x:e.touches[0].clientX, y:e.touches[0].clientY} : {x:e.clientX, y:e.clientY}; }
+    function ptrDown(e) {
         if (!uiVisible) return;
         if (e.cancelable && e.touches) e.preventDefault();
-        const mp = getPointerPos(e);
-        let clickedCorner = false;
-
+        const p = getPtr(e); let hit = false;
         if (selectedSurfaceIndex !== -1) {
-            surfaces[selectedSurfaceIndex].points.forEach((p, idx) => {
-                if (Math.hypot(p.x - mp.x, p.y - mp.y) < 25) { 
-                    draggingPoint = { surfIdx: selectedSurfaceIndex, ptIdx: idx }; 
-                    clickedCorner = true; 
-                }
+            surfaces[selectedSurfaceIndex].points.forEach((pt, i) => {
+                if (Math.hypot(pt.x - p.x, pt.y - p.y) < 25) { draggingPoint = {s:selectedSurfaceIndex, p:i}; hit = true; }
             });
         }
-        if (!clickedCorner) {
-            let found = -1;
-            for (let i = surfaces.length - 1; i >= 0; i--) {
-                const vs = surfaces[i].points;
-                let inside = false;
-                for (let j = 0, k = vs.length - 1; j < vs.length; k = j++) {
-                    if (((vs[j].y > mp.y) != (vs[k].y > mp.y)) && 
-                        (mp.x < (vs[k].x - vs[j].x) * (mp.y - vs[j].y) / (vs[k].y - vs[j].y) + vs[j].x)) inside = !inside;
-                }
-                if(inside) { found = i; break; }
+        if (!hit) {
+            let f = -1;
+            for (let i=surfaces.length-1; i>=0; i--) { // Ray cast simples
+                const vs=surfaces[i].points; let ins=false;
+                for(let j=0,k=vs.length-1; j<vs.length; k=j++) if(((vs[j].y>p.y)!=(vs[k].y>p.y))&&(p.x<(vs[k].x-vs[j].x)*(p.y-vs[j].y)/(vs[k].y-vs[j].y)+vs[j].x)) ins=!ins;
+                if(ins) { f=i; break; }
             }
-            selectSurface(found);
+            selectSurface(f);
         }
     }
-
-    function handlePointerMove(e) {
+    function ptrMove(e) {
         if (!uiVisible) return;
         if (e.touches) e.preventDefault();
-        const mp = getPointerPos(e);
-        if (draggingPoint) {
-            const p = surfaces[draggingPoint.surfIdx].points[draggingPoint.ptIdx];
-            p.x = mp.x; p.y = mp.y;
-        } else {
-            let hovering = false;
-            if(selectedSurfaceIndex > -1) surfaces[selectedSurfaceIndex].points.forEach(p=>{if(Math.hypot(p.x-mp.x, p.y-mp.y)<25) hovering=true;});
-            container.style.cursor = hovering ? 'move' : 'default';
+        const p = getPtr(e);
+        if (draggingPoint) { surfaces[draggingPoint.s].points[draggingPoint.p].x = p.x; surfaces[draggingPoint.s].points[draggingPoint.p].y = p.y; }
+        else {
+            let h = false;
+            if(selectedSurfaceIndex>-1) surfaces[selectedSurfaceIndex].points.forEach(pt=>{if(Math.hypot(pt.x-p.x, pt.y-p.y)<25) h=true;});
+            container.style.cursor = h ? 'move' : 'default';
         }
     }
+    function ptrUp() { if(draggingPoint) triggerAutoSave(); draggingPoint = null; }
 
-    function handlePointerUp() {
-        if (draggingPoint) triggerAutoSave();
-        draggingPoint = null;
-    }
+    container.addEventListener('mousedown', ptrDown); container.addEventListener('mousemove', ptrMove); window.addEventListener('mouseup', ptrUp);
+    container.addEventListener('touchstart', ptrDown, {passive:false}); container.addEventListener('touchmove', ptrMove, {passive:false}); window.addEventListener('touchend', ptrUp);
 
-    container.addEventListener('mousedown', handlePointerDown);
-    container.addEventListener('mousemove', handlePointerMove);
-    window.addEventListener('mouseup', handlePointerUp);
-    container.addEventListener('touchstart', handlePointerDown, { passive: false });
-    container.addEventListener('touchmove', handlePointerMove, { passive: false });
-    window.addEventListener('touchend', handlePointerUp);
-
-    // --- 8. Controles Separados (Fullscreen vs UI) ---
-
-    // Alternar APENAS a Interface
-    function toggleUI(show) {
-        // Se show for indefinido, inverte o estado atual
-        uiVisible = (show !== undefined) ? show : !uiVisible;
-        
-        if (uiVisible) {
-            controlsDiv.classList.remove('ui-hidden');
-            uiCanvas.style.pointerEvents = 'auto';
-        } else {
-            controlsDiv.classList.add('ui-hidden');
-            uiCanvas.style.pointerEvents = 'none';
-            selectSurface(-1);
-        }
-    }
-
-    // Alternar APENAS Tela Cheia
-    function toggleFullscreen() {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(e => console.log(e));
-        } else {
-            document.exitFullscreen();
-        }
-    }
-
-    // Atalhos de Teclado Atualizados
     window.addEventListener('keydown', (e) => {
-        // Tecla H: Esconde/Mostra Interface
-        if (e.key.toLowerCase() === 'h') toggleUI();
-        
-        // Tecla F: Entra/Sai Tela Cheia
-        if (e.key.toLowerCase() === 'f') toggleFullscreen();
-        
-        // Tecla ESC: O padrão do navegador é sair do fullscreen. 
-        // Não precisamos fazer nada aqui, o evento 'fullscreenchange' já lida com o resize.
-        // Se quiser que ESC também mostre a UI (caso esteja escondida), descomente abaixo:
-        // if (e.key === 'Escape') toggleUI(true);
-
-        if (e.code === 'Space') {
-            const v = surfaces.find(s => s.type === 'video' && s.mediaElement);
-            if(v) (v.mediaElement.paused) ? globalAction('play') : globalAction('pause');
-        }
+        if (e.key.toLowerCase()==='h') toggleUI();
+        if (e.key.toLowerCase()==='f') toggleFullscreen();
+        if (e.code==='Space') { const v=surfaces.find(s=>s.type==='video'&&s.mediaElement); if(v) (v.mediaElement.paused)?globalAction('play'):globalAction('pause'); }
     });
 
-    // --- 9. UI Helpers ---
+    // --- 7. Funções de Controle ---
+    function toggleUI() {
+        uiVisible = !uiVisible;
+        if (uiVisible) { controlsDiv.style.display='block'; uiCanvas.style.pointerEvents='auto'; }
+        else { controlsDiv.style.display='none'; uiCanvas.style.pointerEvents='none'; selectSurface(-1); }
+    }
+    function toggleFullscreen() { !document.fullscreenElement ? document.documentElement.requestFullscreen().catch(()=>{}) : document.exitFullscreen(); }
 
     function addSurface() {
-        const w = 300, h = 200;
-        surfaces.push(new Surface((window.innerWidth-w)/2, (window.innerHeight-h)/2, w, h));
-        selectSurface(surfaces.length - 1);
-        triggerAutoSave();
+        const w=300, h=200; surfaces.push(new Surface((window.innerWidth-w)/2,(window.innerHeight-h)/2,w,h));
+        selectSurface(surfaces.length-1); triggerAutoSave();
     }
-    
     function selectSurface(i) {
         selectedSurfaceIndex = i;
-        const panel = document.getElementById('edit-panel');
-        const noSel = document.getElementById('no-selection');
-        if (i === -1) { panel.style.display='none'; noSel.style.display='block'; return;}
-        
-        panel.style.display='block'; noSel.style.display='none';
-        document.getElementById('sel-id').innerText = "#"+i;
-        
+        const p = document.getElementById('edit-panel'), ns = document.getElementById('no-selection');
+        if (i===-1) { p.style.display='none'; ns.style.display='block'; return; }
+        p.style.display='block'; ns.style.display='none'; document.getElementById('sel-id').innerText="#"+i;
         const s = surfaces[i];
-        document.getElementById('contentType').value = s.type;
-        document.getElementById('surfColorPicker').value = s.hexColor;
+        document.getElementById('contentType').value=s.type;
+        document.getElementById('surfColorPicker').value=s.hexColor;
         document.getElementById('urlInput').value = (s.sourceUrl && !s.isLocalFile) ? s.sourceUrl : '';
-        const warning = document.getElementById('media-warning');
-        warning.style.display = (s.type !== 'color' && s.isLocalFile) ? 'block' : 'none';
-        
+        document.getElementById('media-warning').style.display = (s.type!=='color'&&s.isLocalFile)?'block':'none';
         updateUIForType(s.type);
     }
-
-    function deleteSurface() {
-        if(selectedSurfaceIndex===-1)return;
-        const s = surfaces[selectedSurfaceIndex];
-        if(s.glTexture) gl.deleteTexture(s.glTexture);
-        surfaces.splice(selectedSurfaceIndex,1);
-        selectSurface(-1);
-        triggerAutoSave();
-    }
-
-    function moveLayer(dir) {
-        if(selectedSurfaceIndex===-1)return;
-        const nIdx = selectedSurfaceIndex + dir;
-        if(nIdx < 0 || nIdx >= surfaces.length) return;
-        [surfaces[selectedSurfaceIndex], surfaces[nIdx]] = [surfaces[nIdx], surfaces[selectedSurfaceIndex]];
-        selectSurface(nIdx);
-        triggerAutoSave();
-    }
-
-    function updateUIForType(t) {
-        document.getElementById('opt-color').style.display = t === 'color' ? 'block' : 'none';
-        document.getElementById('opt-media').style.display = (t === 'image' || t === 'video') ? 'block' : 'none';
-    }
+    function deleteSurface() { if(selectedSurfaceIndex===-1)return; if(surfaces[selectedSurfaceIndex].glTexture) gl.deleteTexture(surfaces[selectedSurfaceIndex].glTexture); surfaces.splice(selectedSurfaceIndex,1); selectSurface(-1); triggerAutoSave(); }
+    function moveLayer(d) { if(selectedSurfaceIndex===-1)return; const n=selectedSurfaceIndex+d; if(n>=0&&n<surfaces.length) { [surfaces[selectedSurfaceIndex],surfaces[n]]=[surfaces[n],surfaces[selectedSurfaceIndex]]; selectSurface(n); triggerAutoSave(); } }
     
-    function updateSurfaceType() {
-        if(selectedSurfaceIndex===-1)return;
-        const t = document.getElementById('contentType').value;
-        surfaces[selectedSurfaceIndex].type = t;
-        updateUIForType(t);
-        selectSurface(selectedSurfaceIndex); 
-        triggerAutoSave();
+    function updateUIForType(t) { document.getElementById('opt-color').style.display=t==='color'?'block':'none'; document.getElementById('opt-media').style.display=t!=='color'?'block':'none'; }
+    function updateSurfaceType() { if(selectedSurfaceIndex===-1)return; const t=document.getElementById('contentType').value; surfaces[selectedSurfaceIndex].type=t; updateUIForType(t); selectSurface(selectedSurfaceIndex); triggerAutoSave(); }
+    function updateBgColor() { bgColor = hexToRgb(document.getElementById('bgPicker').value); triggerAutoSave(); }
+    function updateSurfColor() { if(selectedSurfaceIndex===-1)return; const h=document.getElementById('surfColorPicker').value; surfaces[selectedSurfaceIndex].hexColor=h; surfaces[selectedSurfaceIndex].glolor=hexToRgb(h); triggerAutoSave(); }
+    function handleFileUpload(inp) { if(selectedSurfaceIndex===-1||!inp.files[0])return; const f=inp.files[0], u=URL.createObjectURL(f), s=surfaces[selectedSurfaceIndex]; s.isLocalFile=true; s.sourceUrl=null; applyMedia(s,u,f.type.startsWith('video')?'video':'image'); selectSurface(selectedSurfaceIndex); triggerAutoSave(); }
+    function updateUrl(u) { if(selectedSurfaceIndex===-1||!u)return; const s=surfaces[selectedSurfaceIndex]; s.isLocalFile=false; s.sourceUrl=u; applyMedia(s,u,u.match(/\.(mp4|webm|ogg)$/i)?'video':'image'); triggerAutoSave(); }
+    function applyMedia(s,u,t) {
+        s.type=t; s.isTextureReady=false; if(s.glTexture) gl.deleteTexture(s.glTexture); s.glTexture=gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, s.glTexture); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        if(t==='video') { const v=document.createElement('video'); v.crossOrigin="anonymous"; v.src=u; v.loop=true; v.muted=true; v.playsInline=true; v.addEventListener('canplay',()=>{s.isTextureReady=true;}); s.mediaElement=v; }
+        else { const i=new Image(); i.crossOrigin="anonymous"; i.onload=()=>{gl.bindTexture(gl.TEXTURE_2D,s.glTexture); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,i); s.isTextureReady=true;}; i.src=u; s.mediaElement=i; }
     }
+    function globalAction(a) { surfaces.forEach(s=>{if(s.type==='video'&&s.mediaElement){if(a==='play')s.mediaElement.play().catch(()=>{});if(a==='pause')s.mediaElement.pause();if(a==='reset'){s.mediaElement.currentTime=0;s.mediaElement.pause();}}}); showToast("Ação: "+a.toUpperCase()); }
 
-    function updateBgColor() {
-        const h = document.getElementById('bgPicker').value;
-        bgColor = hexToRgbGL(h);
-        triggerAutoSave();
-    }
-    
-    function updateSurfColor() {
-        if(selectedSurfaceIndex===-1)return;
-        const h = document.getElementById('surfColorPicker').value;
-        surfaces[selectedSurfaceIndex].hexColor = h;
-        surfaces[selectedSurfaceIndex].glolor = hexToRgbGL(h);
-        triggerAutoSave();
-    }
-
-    function handleFileUpload(input) {
-        if(selectedSurfaceIndex===-1 || !input.files[0]) return;
-        const f = input.files[0];
-        const u = URL.createObjectURL(f);
-        const t = f.type.startsWith('video') ? 'video' : 'image';
-        const s = surfaces[selectedSurfaceIndex];
-        s.isLocalFile = true; s.sourceUrl = null;
-        applyMediaToSurface(s, u, t);
-        selectSurface(selectedSurfaceIndex);
-        triggerAutoSave();
-    }
-
-    function updateUrl(u) {
-        if(selectedSurfaceIndex===-1 || !u) return;
-        const s = surfaces[selectedSurfaceIndex];
-        const isV = u.match(/\.(mp4|webm|ogg|mov)$/i);
-        s.isLocalFile = false; s.sourceUrl = u;
-        applyMediaToSurface(s, u, isV ? 'video' : 'image');
-        triggerAutoSave();
-    }
-
-    function applyMediaToSurface(s, url, type) {
-        s.type = type; s.isTextureReady = false;
-        if(s.glTexture) gl.deleteTexture(s.glTexture);
-        s.glTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, s.glTexture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        
-        if (type === 'video') {
-            const v = document.createElement('video');
-            v.crossOrigin = "anonymous";
-            v.src = url; v.loop = true; v.muted = true; v.autoplay = false; v.playsInline = true;
-            v.addEventListener('canplay', () => { s.isTextureReady = true; });
-            s.mediaElement = v;
-        } else {
-            const i = new Image();
-            i.crossOrigin = "anonymous";
-            i.onload = () => {
-                gl.bindTexture(gl.TEXTURE_2D, s.glTexture);
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, i);
-                s.isTextureReady = true;
-            };
-            i.src = url;
-            s.mediaElement = i;
+    // --- 8. Persistência ---
+    function getData() { return { bg: document.getElementById('bgPicker').value, surfaces: surfaces.map(s=>({pts:s.points,t:s.type,c:s.hexColor,src:s.sourceUrl,loc:s.isLocalFile})) }; }
+    function loadData(d) {
+        if(!d) return; if(d.bg){document.getElementById('bgPicker').value=d.bg; updateBgColor();}
+        if(d.surfaces){
+            surfaces.forEach(s=>{if(s.glTexture)gl.deleteTexture(s.glTexture)}); surfaces=[];
+            d.surfaces.forEach(sd=>{
+                const s=new Surface(0,0,100,100); s.points=sd.pts; s.type=sd.t; s.hexColor=sd.c; s.glolor=hexToRgb(sd.c); s.isLocalFile=sd.loc; s.sourceUrl=sd.src;
+                if(s.type!=='color'&&!s.isLocalFile&&s.sourceUrl) applyMedia(s,s.sourceUrl,s.type); surfaces.push(s);
+            }); selectSurface(-1);
         }
     }
+    function triggerAutoSave() { clearTimeout(autoSaveTimeout); autoSaveTimeout=setTimeout(()=>{localStorage.setItem('mapping_autosave',JSON.stringify(getData()));},500); }
+    window.onload = () => { const d=localStorage.getItem('mapping_autosave'); if(d) try{loadData(JSON.parse(d)); showToast("Restaurado");}catch(e){} };
+    function exportToFile() { const b=new Blob([JSON.stringify(getData())],{type:"application/json"}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download="project.json"; a.click(); }
+    function importFromFile(inp) { const f=inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{try{loadData(JSON.parse(e.target.result)); triggerAutoSave(); showToast("Importado");}catch(x){alert("Erro");}}; r.readAsText(f); inp.value=''; }
+    function clearAll() { if(confirm("Limpar?")) { surfaces=[]; selectSurface(-1); triggerAutoSave(); } }
 
-    function globalAction(action) {
-        surfaces.forEach(surf => {
-            if (surf.type === 'video' && surf.mediaElement) {
-                if(action === 'play') surf.mediaElement.play().catch(e=>{});
-                if(action === 'pause') surf.mediaElement.pause();
-                if(action === 'reset') { surf.mediaElement.currentTime = 0; surf.mediaElement.pause(); }
-            }
-        });
-        showToast("Ação Global: " + action.toUpperCase());
-    }
-
-    // --- 10. Persistência ---
-    function getSceneData() {
-        return {
-            bg: document.getElementById('bgPicker').value,
-            surfaces: surfaces.map(s => ({
-                points: s.points,
-                type: s.type,
-                hexColor: s.hexColor,
-                sourceUrl: s.sourceUrl,
-                isLocalFile: s.isLocalFile
-            }))
-        };
-    }
-
-    function loadSceneData(data) {
-        if(!data) return;
-        if(data.bg) { document.getElementById('bgPicker').value = data.bg; updateBgColor(); }
-        if(data.surfaces) {
-            surfaces.forEach(s => { if(s.glTexture) gl.deleteTexture(s.glTexture); });
-            surfaces = [];
-            data.surfaces.forEach(sd => {
-                const surf = new Surface(0,0,100,100);
-                surf.points = sd.points;
-                surf.type = sd.type;
-                surf.hexColor = sd.hexColor;
-                surf.glolor = hexToRgbGL(sd.hexColor);
-                surf.isLocalFile = sd.isLocalFile;
-                surf.sourceUrl = sd.sourceUrl;
-                if (surf.type !== 'color' && !surf.isLocalFile && surf.sourceUrl) {
-                    applyMediaToSurface(surf, surf.sourceUrl, surf.type);
-                }
-                surfaces.push(surf);
-            });
-            selectSurface(-1);
-        }
-    }
-
-    function triggerAutoSave() {
-        clearTimeout(autoSaveTimeout);
-        autoSaveTimeout = setTimeout(() => {
-            localStorage.setItem('mapping_studio_autosave', JSON.stringify(getSceneData()));
-        }, 500);
-    }
-
-    window.addEventListener('load', () => {
-        const saved = localStorage.getItem('mapping_studio_autosave');
-        if(saved) {
-            try { loadSceneData(JSON.parse(saved)); showToast("Sessão Restaurada"); } 
-            catch(e) { console.error(e); }
-        }
-    });
-
-    function exportToFile() {
-        const blob = new Blob([JSON.stringify(getSceneData(), null, 2)], {type: "application/json"});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = "mapping_project.json";
-        a.click(); URL.revokeObjectURL(url);
-        showToast("Projeto Exportado");
-    }
-
-    function importFromFile(input) {
-        const file = input.files[0];
-        if(!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                loadSceneData(JSON.parse(e.target.result));
-                triggerAutoSave();
-                showToast("Projeto Importado");
-            } catch(err) { alert("Arquivo inválido"); }
-        };
-        reader.readAsText(file);
-        input.value = '';
-    }
-    
-    function clearAll() {
-        if(confirm("Apagar todas as telas?")) {
-            surfaces = []; selectSurface(-1); triggerAutoSave(); showToast("Tudo Limpo");
-        }
-    }
-
-    function hexToRgbGL(hex) {
-        const bi = parseInt(hex.slice(1), 16);
-        return [((bi>>16)&255)/255, ((bi>>8)&255)/255, (bi&255)/255, 1.0];
-    }
-    function showToast(msg) {
-        const t = document.getElementById('toast');
-        t.innerText = msg; t.style.opacity = 1;
-        setTimeout(() => t.style.opacity = 0, 2000);
-    }
+    function hexToRgb(h) { const i=parseInt(h.slice(1),16); return [((i>>16)&255)/255,((i>>8)&255)/255,(i&255)/255,1.0]; }
+    function showToast(m) { const t=document.getElementById('toast'); t.innerText=m; t.style.opacity=1; setTimeout(()=>t.style.opacity=0,2000); }
 </script>
 </body>
 </html>
